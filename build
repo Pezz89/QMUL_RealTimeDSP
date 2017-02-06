@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+../Bela/scripts/build_project.sh ./src/ -p Assignment_1
