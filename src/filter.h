@@ -5,18 +5,18 @@
 
 class Filter {
     public:
-        Filter(float crossoverFrequency, float fs, bool highpass=false, bool linkwitzRiley=true) {
+        Filter(const float &crossoverFrequency, const float &fs, const bool &highpass=false, const bool &linkwitzRiley=true) {
             // Filter class constructor is used for the calculation of filter
             // coefficients and delay line memory allocation.
 
             // Calculate ratio between cutoff frequency and sampling rate
-            double wc = crossoverFrequency/fs;
+            const double wc = crossoverFrequency/fs;
 
             // Deifine Q as the square root of 2
-            double q = sqrt(2.0);
+            const double q = sqrt(2.0);
 
             // Warp the frequency to convert from continuous to discrete time cutoff
-            double wd1 = 1.0 / tan(M_PI*wc);
+            const double wd1 = 1.0 / tan(M_PI*wc);
  
             // Calculate coefficients from equation and store in a vector
             numerator.push_back(1.0 / (1.0 + q*wd1 + pow(wd1, 2)));
@@ -138,11 +138,11 @@ class Filter {
         template<typename T>
         std::vector<T> convolve(std::vector<T> const &f, std::vector<T> const &g) {
             // Calculate the size of input vectors
-            int const nf = f.size();
-            int const ng = g.size();
+            const int nf = f.size();
+            const int ng = g.size();
             // Calculate the size of output vector as the combined size of both
             // input vectors, minus 1
-            int const n  = nf + ng - 1;
+            const int n  = nf + ng - 1;
             // Initialize vector of the same input type as input vectors
             // Allocate memory for all elements of the output to be calculated
             std::vector<T> out(n, T());
@@ -150,8 +150,8 @@ class Filter {
             for(auto i(0); i < n; ++i) {
                 // Calculate minimum and maximum indexes to iterate over each
                 // vector
-                int const jmn = (i >= ng - 1)? i - (ng - 1) : 0;
-                int const jmx = (i <  nf - 1)? i : nf - 1;
+                const int jmn = (i >= ng - 1)? i - (ng - 1) : 0;
+                const int jmx = (i <  nf - 1)? i : nf - 1;
                 // Accumulate the multiplication of elements in both vectors,
                 // based on the indexes calculated, to give the output value at
                 // the current output index
