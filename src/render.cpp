@@ -17,6 +17,7 @@
 #include <Scope.h>
 
 #include "filter.h"
+#include "userOptions.h"
 
 /* TASK: declare any global variables you need here */
 
@@ -29,30 +30,30 @@
 //
 // Return true on success; returning false halts the program.
 
+// Create filter objects using unique pointers for automatic memory
+// deallocation
 std::unique_ptr<Filter> gLowPass;
 std::unique_ptr<Filter> gHighPass;
 
-// instantiate the scope
+// Instantiate the scope
 Scope scope;
 bool setup(BelaContext *context, void *userData)
 {
-
+    // Set the Bela IDE scope to read two outputs
     scope.setup(2, context->audioSampleRate);
+    // Set default values for when command line arguments are not provided by
+    // the user
     float crossoverFrequency = 1000.0;
+    bool linkwitzRiley = false;
     // Retrieve a parameter passed in from the initAudio() call
     if(userData != 0)
-        crossoverFrequency = *(float *)userData;
+        crossoverFrequency = (*(UserOpts *)userData).frequency;
+        linkwitzRiley = (*(UserOpts *)userData).linkwitzRiley;
 
-    /* TASK:
-     * Calculate the filter coefficients based on the given
-     * crossover frequency.
-     *
-     * Initialise any previous state (clearing buffers etc.)
-     * to prepare for calls to render()
-     */
-
-    gLowPass.reset(new Filter(crossoverFrequency, context->audioSampleRate));
-    gHighPass.reset(new Filter(crossoverFrequency, context->audioSampleRate, true));
+    // Create a low-pass and high-pass filter object using the crossover
+    // frequency and filter design specified by CLI arguments
+    gLowPass.reset(new Filter(crossoverFrequency, context->audioSampleRate, false, linkwitzRiley));
+    gHighPass.reset(new Filter(crossoverFrequency, context->audioSampleRate, true, linkwitzRiley));
 
     return true;
 }
@@ -79,11 +80,12 @@ void render(BelaContext *context, void *userData)
         // Convert input to mono
         float monoSamp = (leftIn + rightIn) * 0.5;
 
+        // Apply filter to current sample for both channels.
+        // filtering/buffering is handeled within the Filter objects.
         float leftOut = gLowPass->applyFilter(monoSamp);
         float rightOut = gHighPass->applyFilter(monoSamp);
-        //leftOut = monoSamp;
-        //rightOut = monoSamp;
         
+        // Plot the output of the filters to the IDE scope
         scope.log(leftOut, rightOut);
         // Write the sample into the output buffer
         audioWrite(context, n, 0, leftOut);
@@ -96,9 +98,5 @@ void render(BelaContext *context, void *userData)
 
 void cleanup(BelaContext *context, void *userData)
 {
-    /* TASK:
-     * If you allocate any memory, be sure to release it here.
-     * You may or may not need anything in this function, depending
-     * on your implementation.
-     */
+    // Cleanup wasn't necessary through the use of unique pointers.
 }

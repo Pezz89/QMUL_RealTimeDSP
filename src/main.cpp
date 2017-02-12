@@ -18,6 +18,8 @@
 #include <getopt.h>
 #include <Bela.h>
 
+#include "userOptions.h"
+
 using namespace std;
 
 // Handle Ctrl-C by requesting that the audio rendering stop
@@ -39,12 +41,15 @@ void usage(const char * processName)
 int main(int argc, char *argv[])
 {
 	BelaInitSettings settings;	// Standard audio settings
-	float frequency = 5000.0;	// Frequency of crossover
+    
+    // Initialize default values for command line options
+    UserOpts uOpts = {1000.0, false};
 
 	struct option customOptions[] =
 	{
 		{"help", 0, NULL, 'h'},
 		{"frequency", 1, NULL, 'f'},
+		{"linkwitzriley", 0, NULL, 'l'},
 		{NULL, 0, NULL, 0}
 	};
 
@@ -61,12 +66,15 @@ int main(int argc, char *argv[])
 				usage(basename(argv[0]));
 				exit(0);
         case 'f':
-        		frequency = atof(optarg);
-        		if(frequency < 20.0)
-        			frequency = 20.0;
-        		if(frequency > 5000.0)
-        			frequency = 5000.0;
+        		uOpts.frequency = atof(optarg);
+        		if(uOpts.frequency < 20.0)
+        			uOpts.frequency = 20.0;
+        		if(uOpts.frequency > 5000.0)
+        			uOpts.frequency = 5000.0;
         		break;
+        case 'l':
+                uOpts.linkwitzRiley = true;
+                break;
 		case '?':
 		default:
 				usage(basename(argv[0]));
@@ -75,7 +83,7 @@ int main(int argc, char *argv[])
 	}
 
 	// Initialise the PRU audio device
-	if(Bela_initAudio(&settings, &frequency) != 0) {
+	if(Bela_initAudio(&settings, &uOpts) != 0) {
 		cout << "Error: unable to initialise audio" << endl;
 		return -1;
 	}
