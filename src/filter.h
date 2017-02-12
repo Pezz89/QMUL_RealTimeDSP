@@ -46,10 +46,6 @@ class Filter {
         }
         
         float applyFilter(float x0) {
-            float y = 0;
-
-                
-
             ++inputDelayBufWritePtr;
             inputDelayBufWritePtr = (inputDelayBufWritePtr+inputDelaySize)%inputDelaySize;
 
@@ -58,13 +54,13 @@ class Filter {
 
             inputDelayBuf[(inputDelayBufWritePtr+inputDelaySize)%inputDelaySize] = x0;
 
-            y = x0 * numerator[0] 
-                + inputDelayBuf[(inputDelayBufWritePtr-1+inputDelaySize)%inputDelaySize] * numerator[1] 
-                + inputDelayBuf[(inputDelayBufWritePtr-2+inputDelaySize)%inputDelaySize] * numerator[2]
-                - outputDelayBuf[(outputDelayBufWritePtr-1+outputDelaySize)%outputDelaySize] * denominator[0]
-                - outputDelayBuf[(outputDelayBufWritePtr-2+outputDelaySize)%outputDelaySize] * denominator[1];
-
-            //rt_printf("%d\n", y);
+            float y = 0;
+            for(unsigned int i = 0; i < inputDelaySize; i++) {
+                y += inputDelayBuf[(inputDelayBufWritePtr-i+inputDelaySize)%inputDelaySize] * numerator[i];
+            }
+            for(unsigned int i = 0; i < outputDelaySize; i++) {
+                y -= outputDelayBuf[(outputDelayBufWritePtr-i-1+outputDelaySize)%outputDelaySize] * denominator[i];
+            }
 
             outputDelayBuf[(outputDelayBufWritePtr+outputDelaySize)%outputDelaySize] = y;
 
