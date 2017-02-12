@@ -39,7 +39,7 @@ void usage(const char * processName)
 int main(int argc, char *argv[])
 {
 	BelaInitSettings settings;	// Standard audio settings
-	float frequency = 1000.0;	// Frequency of crossover
+	float frequency = 5000.0;	// Frequency of crossover
 
 	struct option customOptions[] =
 	{
