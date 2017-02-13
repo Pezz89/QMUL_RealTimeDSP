@@ -9,7 +9,7 @@ def main():
     # Sampling frequency
     fs = 44100
     # Cutoff frequency in hertz
-    cutoff_freq = 5000.
+    cutoff_freq = 1000.
 
     # Calculate ratio between cutoff frequency and sampling rate
     wc = cutoff_freq/fs
@@ -35,12 +35,17 @@ def main():
     b_conv = np.convolve(b, b)
     a_conv = np.convolve(a, a)
 
-    dpi = 100
+    dpi = 150
     fig = plt.figure(figsize=(1300/dpi, 1000/dpi), dpi=dpi)
     # Plot dB magnitude response of 2nd order Butterworth low-pass filter
-    w, bwlp_h = signal.freqz(b, a, plot = lambda w, h: plt.plot((fs * 0.5 / np.pi) * w, 20 * np.log10(abs(h)), color='r'))
+    w, bwlp_h = signal.freqz(b, a, plot = lambda w, h: plt.plot((fs * 0.5 / np.pi) * w, 20 * np.log10(abs(h)), color='b', label = 'Exepected Value'))
+    manual_plt_x = np.array([300, 500, 750, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 3000, 4000])
+    manual_plt_y = 20 * np.log10(abs(np.array([1.0, 0.957, 0.864, 0.707, 0.538, 0.414, 0.318, 0.256, 0.203, 0.169, 0.122, 0.076])))
+    plt.plot(manual_plt_x, manual_plt_y, marker='x', linestyle='None', color='r', label='Manual Measurement')
+    '''
     # Plot dB magnitude response of 4th order Linkwitz-Riley low-pass filter
     w, lrlp_h = signal.freqz(b_conv, a_conv, plot = lambda w, h: plt.plot((fs * 0.5 / np.pi) * w, 20 * np.log10(abs(h)), color='b'))
+    '''
 
 
     b[0] = b[0]*wd1**2;
@@ -48,6 +53,7 @@ def main():
     b[2] = b[2]*wd1**2;
     b_conv = np.convolve(b, b)
     a_conv = np.convolve(a, a)
+    '''
     # Plot dB magnitude response of 2nd order Butterworth high-pass filter
     w, bwhp_h = signal.freqz(b, a, plot = lambda w, h: plt.plot((fs * 0.5 / np.pi) * w, 20 * np.log10(abs(h)), color='r', label='Butterworth'))
     # Plot dB magnitude response of 4th order Linkwitz-Riley high-pass filter
@@ -55,14 +61,15 @@ def main():
 
     plt.plot((fs * 0.5 / np.pi) * w, 20 * np.log10(abs(bwlp_h)+abs(bwhp_h)), linewidth=2.0, linestyle=':', color='r', label='Btrwrth Crossover Gain')
     plt.plot((fs * 0.5 / np.pi) * w, 20 * np.log10(abs(lrlp_h)+abs(lrhp_h)), linewidth=2.0, linestyle=':', color='b', label='Lw-Rl Crossover Gain')
+    '''
 
     # Display cutoff frequency
     plt.axvline(cutoff_freq, color='r', linestyle='--')
-    plt.ylim(-20, 5)
-    plt.xlim(0, 15000)
+    plt.ylim(-25, 5)
+    plt.xlim(0, manual_plt_x[-1]+500)
 
     # Get current tick locations and append 271 to this array
-    x_ticks = np.append(plt.xticks()[0], 5000.0)
+    x_ticks = np.append(plt.xticks()[0], cutoff_freq)
 
     # Set xtick locations to the values of the array `x_ticks`
     plt.xticks(x_ticks)
@@ -73,6 +80,7 @@ def main():
         fancybox=True,
         shadow=True
     )
+    '''
     plt.annotate(
         '-3dB',
         xy=(5000, -3),
@@ -101,10 +109,11 @@ def main():
         xycoords='data',
         textcoords='data'
     )
+    '''
     plt.grid(True)
     plt.xlabel("Frequency (Hz)")
     plt.ylabel("Magnitude (log dB)")
-    fig.savefig("./XOverFreqResp.png")
+    fig.savefig("./BWFreqResp.png")
 
 
 if __name__ == "__main__":
