@@ -20,29 +20,91 @@ def main():
     # Warp the frequency to convert from continuous to discrete time cutoff
     wd1 = 1.0 / np.tan(np.pi*wc)
 
+    b = np.zeros(3)
+    a = np.zeros(3)
     # Calculate coefficients from equation
-    b0 = 1.0 / (1.0 + q*wd1 + wd1**2)
-    b1 = 2*b0
-    b2 = b0
-    a1 = -2.0 * (wd1**2 - 1.0) * b0
-    a2 = (1.0 - q*wd1 + wd1**2) * b0
+    b[0] = 1.0 / (1.0 + q*wd1 + wd1**2)
+    b[1] = 2*b[0]
+    b[2] = b[0]
+    a[0] = 1
+    a[1] = -2.0 * (wd1**2 - 1.0) * b[0]
+    a[2] = (1.0 - q*wd1 + wd1**2) * b[0]
 
-    b_conv = np.convolve([b0, b1, b2], [b0, b1, b2])
-    a_conv = np.convolve([1, a1, a2], [1, a1, a2])
-    w, h = signal.freqz([b0, b1, b2], [1, a1, a2], plot = lambda w, h: plt.plot((fs * 0.5 / np.pi) * w, 20 * np.log10(abs(h))))
-    w, h = signal.freqz(b_conv, a_conv, plot = lambda w, h: plt.plot((fs * 0.5 / np.pi) * w, 20 * np.log10(abs(h))))
-    pdb.set_trace()
-    b0 = b0*wd1**2;
-    b1 = -b1*wd1**2;
-    b2 = b2*wd1**2;
-    b_conv = np.convolve([b0, b1, b2], [b0, b1, b2])
-    a_conv = np.convolve([1, a1, a2], [1, a1, a2])
-    w, h = signal.freqz([b0, b1, b2], [1, a1, a2], plot = lambda w, h: plt.plot((fs * 0.5 / np.pi) * w, 20 * np.log10(abs(h))))
-    w, h = signal.freqz(b_conv, a_conv, plot = lambda w, h: plt.plot((fs * 0.5 / np.pi) * w, 20 * np.log10(abs(h))))
+    # Convolve coefficients with themselves to produce a 4th order
+    # Linkwitz-Riley filter.
+    b_conv = np.convolve(b, b)
+    a_conv = np.convolve(a, a)
+
+    dpi = 100
+    fig = plt.figure(figsize=(1300/dpi, 1000/dpi), dpi=dpi)
+    # Plot dB magnitude response of 2nd order Butterworth low-pass filter
+    w, bwlp_h = signal.freqz(b, a, plot = lambda w, h: plt.plot((fs * 0.5 / np.pi) * w, 20 * np.log10(abs(h)), color='r'))
+    # Plot dB magnitude response of 4th order Linkwitz-Riley low-pass filter
+    w, lrlp_h = signal.freqz(b_conv, a_conv, plot = lambda w, h: plt.plot((fs * 0.5 / np.pi) * w, 20 * np.log10(abs(h)), color='b'))
 
 
-    plt.axvline(cutoff_freq, color='r')
-    plt.show()
+    b[0] = b[0]*wd1**2;
+    b[1] = -b[1]*wd1**2;
+    b[2] = b[2]*wd1**2;
+    b_conv = np.convolve(b, b)
+    a_conv = np.convolve(a, a)
+    # Plot dB magnitude response of 2nd order Butterworth high-pass filter
+    w, bwhp_h = signal.freqz(b, a, plot = lambda w, h: plt.plot((fs * 0.5 / np.pi) * w, 20 * np.log10(abs(h)), color='r', label='Butterworth'))
+    # Plot dB magnitude response of 4th order Linkwitz-Riley high-pass filter
+    w, lrhp_h = signal.freqz(b_conv, a_conv, plot = lambda w, h: plt.plot((fs * 0.5 / np.pi) * w, 20 * np.log10(abs(h)), color='b', label='Linkwitz-Riley'))
+
+    plt.plot((fs * 0.5 / np.pi) * w, 20 * np.log10(abs(bwlp_h)+abs(bwhp_h)), linewidth=2.0, linestyle=':', color='r', label='Btrwrth Crossover Gain')
+    plt.plot((fs * 0.5 / np.pi) * w, 20 * np.log10(abs(lrlp_h)+abs(lrhp_h)), linewidth=2.0, linestyle=':', color='b', label='Lw-Rl Crossover Gain')
+
+    # Display cutoff frequency
+    plt.axvline(cutoff_freq, color='r', linestyle='--')
+    plt.ylim(-20, 5)
+    plt.xlim(0, 15000)
+
+    # Get current tick locations and append 271 to this array
+    x_ticks = np.append(plt.xticks()[0], 5000.0)
+
+    # Set xtick locations to the values of the array `x_ticks`
+    plt.xticks(x_ticks)
+    plt.legend(
+        loc='upper center',
+        bbox_to_anchor=(0.5, 1.10),
+        ncol=2,
+        fancybox=True,
+        shadow=True
+    )
+    plt.annotate(
+        '-3dB',
+        xy=(5000, -3),
+        xytext=(5000, -3),
+        xycoords='data',
+        textcoords='data'
+    )
+    plt.annotate(
+        '-6dB',
+        xy=(5000, -6),
+        xytext=(5000, -6),
+        xycoords='data',
+        textcoords='data'
+    )
+    plt.annotate(
+        '0dB',
+        xy=(5000, 0),
+        xytext=(5000, 0),
+        xycoords='data',
+        textcoords='data'
+    )
+    plt.annotate(
+        '+3dB',
+        xy=(5000, 3),
+        xytext=(5000, 3),
+        xycoords='data',
+        textcoords='data'
+    )
+    plt.grid(True)
+    plt.xlabel("Frequency (Hz)")
+    plt.ylabel("Magnitude (log dB)")
+    fig.savefig("./XOverFreqResp.png")
 
 
 if __name__ == "__main__":
