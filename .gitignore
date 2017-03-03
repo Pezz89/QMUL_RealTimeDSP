@@ -32,6 +32,8 @@ bin/
 
 # Log files
 *.log
+*.pdf
 
+audio/
 external/
 CMakeFiles/
