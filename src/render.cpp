@@ -6,7 +6,7 @@
  *
  * This code runs on BeagleBone Black with the Bela/BeagleRT environment.
  *
- * 2016, 2017 
+ * 2016, 2017
  * Becky Stewart
  *
  * 2015
@@ -29,7 +29,7 @@
 extern float *gDrumSampleBuffers[NUMBER_OF_DRUMS];
 extern int gDrumSampleBufferLengths[NUMBER_OF_DRUMS];
 
-int gIsPlaying = 0;			/* Whether we should play or not. Implement this in Step 4b. */
+int gIsPlaying = 0;         /* Whether we should play or not. Implement this in Step 4b. */
 
 /* Read pointer into the current drum sample buffer.
  *
@@ -91,8 +91,8 @@ int gPreviousPattern = 0;
 
 bool setup(BelaContext *context, void *userData)
 {
-	/* Step 2: initialise GPIO pins */
-	return true;
+    pinMode(context, 0, P8_07, OUTPUT);
+    return true;
 }
 
 // render() is called regularly at the highest priority by the audio engine.
@@ -102,31 +102,35 @@ bool setup(BelaContext *context, void *userData)
 
 void render(BelaContext *context, void *userData)
 {
-	/* TODO: your audio processing code goes here! */
 
-	/* Step 2: use gReadPointer to play a drum sound */
+    for(unsigned int n=0; n<context->digitalFrames; n++){
+        digitalWrite(context, n, P8_07, GPIO_HIGH); //write the status to the LED
+    }
+    /* TODO: your audio processing code goes here! */
 
-	/* Step 3: use multiple read pointers to play multiple drums */
+    /* Step 2: use gReadPointer to play a drum sound */
 
-	/* Step 4: count samples and decide when to trigger the next event */
+    /* Step 3: use multiple read pointers to play multiple drums */
+
+    /* Step 4: count samples and decide when to trigger the next event */
 }
 
 /* Start playing a particular drum sound given by drumIndex.
  */
 void startPlayingDrum(int drumIndex) {
-	/* TODO in Steps 3a and 3b */
+    /* TODO in Steps 3a and 3b */
 }
 
 /* Start playing the next event in the pattern */
 void startNextEvent() {
-	/* TODO in Step 4 */
+    /* TODO in Step 4 */
 }
 
 /* Returns whether the given event contains the given drum sound */
 int eventContainsDrum(int event, int drum) {
-	if(event & (1 << drum))
-		return 1;
-	return 0;
+    if(event & (1 << drum))
+        return 1;
+    return 0;
 }
 
 // cleanup_render() is called once at the end, after the audio has stopped.
