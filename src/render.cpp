@@ -99,6 +99,9 @@ class DebouncedButton {
                 val = true;
                 counter++;
             }
+            else if (val == true && prevVal == true) {
+                counter++;
+            }
             else {
                 prevVal = val;
                 counter = 0;
