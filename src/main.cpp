@@ -57,7 +57,6 @@ void usage(const char * processName)
 }
 
 int initDrums() {
-    return 0;
     /* Load drums from WAV files */
     SNDFILE *sndfile ;
     SF_INFO sfinfo ;
@@ -67,7 +66,7 @@ int initDrums() {
         snprintf(filename, 64, "drums/drum%d.wav", i);
 
         if (!(sndfile = sf_open (filename, SFM_READ, &sfinfo))) {
-            printf("Couldn't open file %s\n", filename);
+            rt_printf("Couldn't open file %s\n", filename);
 
             /* Free already loaded sounds */
             for(int j = 0; j < i; j++)
@@ -76,7 +75,7 @@ int initDrums() {
         }
 
         if (sfinfo.channels != 1) {
-            printf("Error: %s is not a mono file\n", filename);
+            rt_printf("Error: %s is not a mono file\n", filename);
 
             /* Free already loaded sounds */
             for(int j = 0; j < i; j++)
@@ -87,7 +86,7 @@ int initDrums() {
         gDrumSampleBufferLengths[i] = sfinfo.frames;
         gDrumSampleBuffers[i] = (float *)malloc(gDrumSampleBufferLengths[i] * sizeof(float));
         if(gDrumSampleBuffers[i] == NULL) {
-            printf("Error: couldn't allocate buffer for %s\n", filename);
+            rt_printf("Error: couldn't allocate buffer for %s\n", filename);
 
             /* Free already loaded sounds */
             for(int j = 0; j < i; j++)
@@ -111,7 +110,7 @@ int initDrums() {
                 scale = 1.0 ;
             else
                 scale = 32700.0 / scale ;
-            printf("Scale = %f\n", scale);
+            rt_printf("Scale = %f\n", scale);
 
             for (m = 0; m < gDrumSampleBufferLengths[i]; m++)
                 gDrumSampleBuffers[i][m] *= scale;
@@ -200,7 +199,7 @@ int main(int argc, char *argv[])
 
     // Load the drum sounds and the patterns
     if(initDrums()) {
-        printf("Unable to load drum sounds. Check that you have all the WAV files!\n");
+        rt_printf("Unable to load drum sounds. Check that you have all the WAV files!\n");
         return -1;
     }
     initPatterns();

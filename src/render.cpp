@@ -78,6 +78,8 @@ int gPlaysBackwards = 0;
 int gShouldPlayFill = 0;
 int gPreviousPattern = 0;
 
+int gAudioFramesPerAnalogFrame = 0;
+
 /* TODO: Declare any further global variables you need here */
 
 // setup() is called once before the audio rendering starts.
@@ -91,7 +93,19 @@ int gPreviousPattern = 0;
 
 bool setup(BelaContext *context, void *userData)
 {
+    if(context->analogFrames == 0 || context->analogFrames > context->audioFrames) {
+        rt_printf("Error: this example needs analog enabled, with 4 channels\n");
+        return false;
+    }
+
+    // Useful calculations
+    gAudioFramesPerAnalogFrame = context->audioFrames / context->analogFrames;
+
     pinMode(context, 0, P8_07, OUTPUT);
+    pinMode(context, 0, P8_08, INPUT);
+    pinMode(context, 0, P8_09, INPUT);
+    
+    gReadPointer = 0;
     return true;
 }
 
@@ -102,9 +116,35 @@ bool setup(BelaContext *context, void *userData)
 
 void render(BelaContext *context, void *userData)
 {
-
     for(unsigned int n=0; n<context->digitalFrames; n++){
-        digitalWrite(context, n, P8_07, GPIO_HIGH); //write the status to the LED
+        bool button1 = digitalRead(context, n, P8_08);
+        bool button2 = digitalRead(context, n, P8_09);
+        //False value means the button is pressed due to the use of a pull up
+        //resistor
+        if((button1 == false) || (button2 == false)){
+            gTriggerButton1 = 1; //write the status to the LED
+        }
+        else
+        {
+            gTriggerButton1 = 0;
+        }
+        if(gTriggerButton1) {
+            gIsPlaying = true;
+        }
+        if(gIsPlaying) {
+
+            audioWrite(context, n, 0, gDrumSampleBuffers[0][gReadPointer]);
+            audioWrite(context, n, 1, gDrumSampleBuffers[0][gReadPointer]);
+            if(gReadPointer < gDrumSampleBufferLengths[0]) {
+                gReadPointer++;
+            }
+            else
+            {
+                gReadPointer = 0;
+                gIsPlaying = false;
+            }
+        }
+
     }
     /* TODO: your audio processing code goes here! */
 
