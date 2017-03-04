@@ -91,33 +91,41 @@ class DebouncedButton {
 
         bool getCurrentVal(BelaContext *context, int n) {
             bool val = !digitalRead(context, n, pin);
-            if(val == true && prevVal == false) {
-                prevVal = val;
+            if(val == true && prevDBVal == false) {
+                prevDBVal = val;
                 counter++;
             }
-            else if(val == false && prevVal == true && counter < debounceTime) {
+            else if(val == false && prevDBVal == true && counter < debounceTime) {
                 val = true;
                 counter++;
             }
-            else if (val == true && prevVal == true) {
+            else if (val == true && prevDBVal == true) {
                 counter++;
             }
             else {
-                prevVal = val;
+                prevDBVal = val;
                 counter = 0;
             }
             return val;
         }
 
         bool getCurrentToggle(BelaContext *context, int n) {
-            return false;
+            bool val = this->getCurrentVal(context, n);
 
+            if(prevTogVal == false && val == true) {
+                toggleBool = !toggleBool;
+            }
+            prevTogVal = val;
+
+            return toggleBool;
         }
     private:
         int counter;
         int pin;
         int debounceTime;
-        int prevVal;
+        bool prevDBVal;
+        bool prevTogVal;
+        bool toggleBool;
 
         //bool toggleVal;
 };
