@@ -84,6 +84,45 @@ int gAudioFramesPerAnalogFrame = 0;
 
 int gSampleCounter = 0;
 
+class DebouncedButton {
+    public:
+        DebouncedButton() {}
+        DebouncedButton(int pin, int debounceTime) : counter(0), pin(pin), debounceTime(debounceTime) {}
+
+        bool getCurrentVal(BelaContext *context, int n) {
+            bool val = !digitalRead(context, n, pin);
+            if(val == true && prevVal == false) {
+                prevVal = val;
+                counter++;
+            }
+            else if(val == false && prevVal == true && counter < debounceTime) {
+                val = true;
+                counter++;
+            }
+            else {
+                prevVal = val;
+                counter = 0;
+            }
+            return val;
+        }
+
+        bool getCurrentToggle(BelaContext *context, int n) {
+            return false;
+
+        }
+    private:
+        int counter;
+        int pin;
+        int debounceTime;
+        int prevVal;
+
+        //bool toggleVal;
+};
+
+
+DebouncedButton gDebouncedButton1;
+DebouncedButton gDebouncedButton2;
+
 /* TODO: Declare any further global variables you need here */
 
 // setup() is called once before the audio rendering starts.
@@ -112,6 +151,8 @@ bool setup(BelaContext *context, void *userData)
     pinMode(context, 0, P8_08, INPUT);
     pinMode(context, 0, P8_09, INPUT);
 
+    gDebouncedButton1 = DebouncedButton(P8_08, 1.02*context->audioSampleRate);
+    gDebouncedButton2 = DebouncedButton(P8_09, 1.02*context->audioSampleRate);
     return true;
 }
 
@@ -123,12 +164,11 @@ bool setup(BelaContext *context, void *userData)
 void render(BelaContext *context, void *userData)
 {
     for(unsigned int n=0; n<context->digitalFrames; n++){
-        bool button1 = digitalRead(context, n, P8_08);
-        bool button2 = digitalRead(context, n, P8_09);
+        bool button1 = gDebouncedButton1.getCurrentVal(context, n);
+        bool button2 = gDebouncedButton2.getCurrentVal(context, n);
         //False value means the button is pressed due to the use of a pull up
         //resistor
-        /*
-        if(button1 == false){
+        if(button1 == true){
             gTriggerButton1 = 1;
         }
         else
@@ -141,7 +181,7 @@ void render(BelaContext *context, void *userData)
         }
         gPrevTriggerButton1 = gTriggerButton1;
 
-        if(button2 == false){
+        if(button2 == true){
             gTriggerButton2 = 1;
         }
         else
@@ -152,15 +192,17 @@ void render(BelaContext *context, void *userData)
             startPlayingDrum(4);
         }
         gPrevTriggerButton2 = gTriggerButton2;
-        */
 
-        int interval = 44100;
+        int interval = round(1*context->audioSampleRate);
         // Increment counter every sample
+
+        /*
         gSampleCounter++;
         if(gSampleCounter == interval) {
             gSampleCounter = 0;
             startNextEvent();
         }
+        */
 
         float out = 0;
         for(int i=0; i<gDrumBufferForReadPointer.size(); i++) {
