@@ -18,6 +18,7 @@
 #include <Bela.h>
 #include <cmath>
 #include "drums.h"
+#include <array>
 
 
 
@@ -37,7 +38,8 @@ int gIsPlaying = 0;         /* Whether we should play or not. Implement this in 
  * holding each read pointer, the other saying which buffer
  * each read pointer corresponds to.
  */
-int gReadPointer = 0;
+std::array<int, 16> gReadPointers = {0};
+std::array<int, 16> gDrumBufferForReadPointer = {-1};
 
 /* Patterns indicate which drum(s) should play on which beat.
  * Each element of gPatterns is an array, whose length is given
@@ -55,6 +57,7 @@ int gCurrentIndexInPattern = 0;
 /* Triggers from buttons (step 2 etc.). Read these here and
  * do something if they are nonzero (resetting them when done). */
 int gTriggerButton1;
+int gPrevTriggerButton1;
 int gTriggerButton2;
 
 /* This variable holds the interval between events in **milliseconds**
@@ -104,8 +107,7 @@ bool setup(BelaContext *context, void *userData)
     pinMode(context, 0, P8_07, OUTPUT);
     pinMode(context, 0, P8_08, INPUT);
     pinMode(context, 0, P8_09, INPUT);
-    
-    gReadPointer = 0;
+
     return true;
 }
 
@@ -122,17 +124,20 @@ void render(BelaContext *context, void *userData)
         //False value means the button is pressed due to the use of a pull up
         //resistor
         if((button1 == false) || (button2 == false)){
-            gTriggerButton1 = 1; //write the status to the LED
+            gTriggerButton1 = 1;
         }
         else
         {
             gTriggerButton1 = 0;
         }
-        if(gTriggerButton1) {
-            gIsPlaying = true;
+        if(gTriggerButton1 && gTriggerButton1 != gPrevTriggerButton1) {
+            startPlayingDrum(3);
+            startPlayingDrum(4);
+            startPlayingDrum(0);
         }
+        gPrevTriggerButton1 = gTriggerButton1;
+        /*
         if(gIsPlaying) {
-
             audioWrite(context, n, 0, gDrumSampleBuffers[0][gReadPointer]);
             audioWrite(context, n, 1, gDrumSampleBuffers[0][gReadPointer]);
             if(gReadPointer < gDrumSampleBufferLengths[0]) {
@@ -144,7 +149,25 @@ void render(BelaContext *context, void *userData)
                 gIsPlaying = false;
             }
         }
-
+        */
+        float out = 0;
+        for(int i=0; i<gDrumBufferForReadPointer.size(); i++) {
+            int currentBuff = gDrumBufferForReadPointer[i];
+            int currentPtr = gReadPointers[i];
+            if(gDrumBufferForReadPointer[i] > -1) {
+                if(gReadPointers[i] < gDrumSampleBufferLengths[currentBuff]) {
+                    out += gDrumSampleBuffers[currentBuff][currentPtr];
+                    gReadPointers[i]++;
+                }
+                else 
+                {
+                    gReadPointers[i] = 0;
+                    gDrumBufferForReadPointer[i] = -1;
+                }
+            }
+        }
+        audioWrite(context, n, 0, out);
+        audioWrite(context, n, 1, out);
     }
     /* TODO: your audio processing code goes here! */
 
@@ -159,6 +182,13 @@ void render(BelaContext *context, void *userData)
  */
 void startPlayingDrum(int drumIndex) {
     /* TODO in Steps 3a and 3b */
+    for(int i=0; i<gReadPointers.size(); i++) {
+        if(gDrumBufferForReadPointer[i] == -1) {
+            gDrumBufferForReadPointer[i] = drumIndex;
+            gReadPointers[i] = 0;
+            break;
+        }
+    }
 }
 
 /* Start playing the next event in the pattern */
