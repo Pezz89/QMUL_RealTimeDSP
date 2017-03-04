@@ -20,8 +20,6 @@
 #include "drums.h"
 #include <array>
 
-
-
 /* Variables which are given to you: */
 
 /* Drum samples are pre-loaded in these buffers. Length of each
@@ -38,8 +36,8 @@ int gIsPlaying = 0;         /* Whether we should play or not. Implement this in 
  * holding each read pointer, the other saying which buffer
  * each read pointer corresponds to.
  */
-std::array<int, 16> gReadPointers = {0};
-std::array<int, 16> gDrumBufferForReadPointer = {-1};
+std::array<int, 16> gReadPointers;
+std::array<int, 16> gDrumBufferForReadPointer;
 
 /* Patterns indicate which drum(s) should play on which beat.
  * Each element of gPatterns is an array, whose length is given
@@ -56,8 +54,8 @@ int gCurrentIndexInPattern = 0;
 
 /* Triggers from buttons (step 2 etc.). Read these here and
  * do something if they are nonzero (resetting them when done). */
-int gTriggerButton1;
-int gPrevTriggerButton1;
+int gTriggerButton1 = 0;
+int gPrevTriggerButton1 = 0;
 int gTriggerButton2;
 
 /* This variable holds the interval between events in **milliseconds**
@@ -96,6 +94,9 @@ int gAudioFramesPerAnalogFrame = 0;
 
 bool setup(BelaContext *context, void *userData)
 {
+    gDrumBufferForReadPointer.fill(-1);
+    gReadPointers.fill(0);
+
     if(context->analogFrames == 0 || context->analogFrames > context->audioFrames) {
         rt_printf("Error: this example needs analog enabled, with 4 channels\n");
         return false;
@@ -182,6 +183,7 @@ void render(BelaContext *context, void *userData)
  */
 void startPlayingDrum(int drumIndex) {
     /* TODO in Steps 3a and 3b */
+
     for(int i=0; i<gReadPointers.size(); i++) {
         if(gDrumBufferForReadPointer[i] == -1) {
             gDrumBufferForReadPointer[i] = drumIndex;
