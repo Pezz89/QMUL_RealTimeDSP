@@ -82,6 +82,8 @@ int gPreviousPattern = 0;
 
 int gAudioFramesPerAnalogFrame = 0;
 
+int gSampleCounter = 0;
+
 /* TODO: Declare any further global variables you need here */
 
 // setup() is called once before the audio rendering starts.
@@ -125,6 +127,7 @@ void render(BelaContext *context, void *userData)
         bool button2 = digitalRead(context, n, P8_09);
         //False value means the button is pressed due to the use of a pull up
         //resistor
+        /*
         if(button1 == false){
             gTriggerButton1 = 1;
         }
@@ -149,6 +152,15 @@ void render(BelaContext *context, void *userData)
             startPlayingDrum(4);
         }
         gPrevTriggerButton2 = gTriggerButton2;
+        */
+
+        int interval = 44100;
+        // Increment counter every sample
+        gSampleCounter++;
+        if(gSampleCounter == interval) {
+            gSampleCounter = 0;
+            startNextEvent();
+        }
 
         float out = 0;
         for(int i=0; i<gDrumBufferForReadPointer.size(); i++) {
@@ -195,6 +207,7 @@ void startPlayingDrum(int drumIndex) {
 /* Start playing the next event in the pattern */
 void startNextEvent() {
     /* TODO in Step 4 */
+    startPlayingDrum(0);
 }
 
 /* Returns whether the given event contains the given drum sound */
