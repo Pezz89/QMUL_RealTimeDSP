@@ -56,7 +56,8 @@ int gCurrentIndexInPattern = 0;
  * do something if they are nonzero (resetting them when done). */
 int gTriggerButton1 = 0;
 int gPrevTriggerButton1 = 0;
-int gTriggerButton2;
+int gTriggerButton2 = 0;
+int gPrevTriggerButton2 = 0;
 
 /* This variable holds the interval between events in **milliseconds**
  * To use it (Step 4a), you will need to work out how many samples
@@ -124,7 +125,7 @@ void render(BelaContext *context, void *userData)
         bool button2 = digitalRead(context, n, P8_09);
         //False value means the button is pressed due to the use of a pull up
         //resistor
-        if((button1 == false) || (button2 == false)){
+        if(button1 == false){
             gTriggerButton1 = 1;
         }
         else
@@ -133,24 +134,22 @@ void render(BelaContext *context, void *userData)
         }
         if(gTriggerButton1 && gTriggerButton1 != gPrevTriggerButton1) {
             startPlayingDrum(3);
-            startPlayingDrum(4);
             startPlayingDrum(0);
         }
         gPrevTriggerButton1 = gTriggerButton1;
-        /*
-        if(gIsPlaying) {
-            audioWrite(context, n, 0, gDrumSampleBuffers[0][gReadPointer]);
-            audioWrite(context, n, 1, gDrumSampleBuffers[0][gReadPointer]);
-            if(gReadPointer < gDrumSampleBufferLengths[0]) {
-                gReadPointer++;
-            }
-            else
-            {
-                gReadPointer = 0;
-                gIsPlaying = false;
-            }
+
+        if(button2 == false){
+            gTriggerButton2 = 1;
         }
-        */
+        else
+        {
+            gTriggerButton2 = 0;
+        }
+        if(gTriggerButton2 && gTriggerButton2 != gPrevTriggerButton2) {
+            startPlayingDrum(4);
+        }
+        gPrevTriggerButton2 = gTriggerButton2;
+
         float out = 0;
         for(int i=0; i<gDrumBufferForReadPointer.size(); i++) {
             int currentBuff = gDrumBufferForReadPointer[i];
