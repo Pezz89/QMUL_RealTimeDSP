@@ -49,7 +49,7 @@ extern int gPatternLengths[NUMBER_OF_PATTERNS];
 /* These variables indicate which pattern we're playing, and
  * where within the pattern we currently are. Used in Step 4c.
  */
-int gCurrentPattern = 0;
+int gCurrentPattern = 1;
 int gCurrentIndexInPattern = 0;
 
 /* Triggers from buttons (step 2 etc.). Read these here and
@@ -305,7 +305,13 @@ void startPlayingDrum(int drumIndex) {
 /* Start playing the next event in the pattern */
 void startNextEvent() {
     /* TODO in Step 4 */
-    startPlayingDrum(0);
+    const int currentPatterLength = gPatternLengths[gCurrentPattern];
+    for(int i = 0; i < sizeof(gDrumSampleBuffers) * sizeof(float*); i++){
+        if(eventContainsDrum(gPatterns[gCurrentPattern][gCurrentIndexInPattern], i))
+            startPlayingDrum(i);
+    }
+    gCurrentIndexInPattern = (gCurrentIndexInPattern+1+currentPatterLength)%currentPatterLength;
+    rt_printf("%d\n", sizeof(gDrumSampleBuffers) / sizeof(float*));
 }
 
 /* Returns whether the given event contains the given drum sound */
