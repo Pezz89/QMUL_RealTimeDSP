@@ -63,7 +63,7 @@ int gPrevTriggerButton2 = 0;
  * To use it (Step 4a), you will need to work out how many samples
  * it corresponds to.
  */
-int gEventIntervalMilliseconds = 250;
+float gEventIntervalMilliseconds = 0.05;
 
 /* This variable indicates whether samples should be triggered or
  * not. It is used in Step 4b, and should be set in gpio.cpp.
@@ -80,14 +80,47 @@ int gPlaysBackwards = 0;
 int gShouldPlayFill = 0;
 int gPreviousPattern = 0;
 
-int gAudioFramesPerAnalogFrame = 0;
+int gAudioFramesPerAnalogFrame;
 
 int gSampleCounter = 0;
+
+class LED {
+    public:
+        LED() {}
+        LED(int pin, int time) : pin(pin), interval(time){}
+
+        void trigger() {
+            active = true;
+            timer = 0;
+        }
+
+        void onIfActive(BelaContext *context, int n) {
+            if(timer > interval) {
+                active = false;
+                timer = 0;
+            }
+            if(active) {
+                digitalWrite(context, n, P8_07, 1);
+                timer++;
+            }
+            else {
+                digitalWrite(context, n, P8_07, 0);
+            }
+        }
+
+    private:
+        int pin;
+        bool active = false;
+        int timer = 0;
+        int interval;
+};
+
+LED gLED;
 
 class DebouncedButton {
     public:
         DebouncedButton() {}
-        DebouncedButton(int pin, int debounceTime) : counter(0), pin(pin), debounceTime(debounceTime) {}
+        DebouncedButton(int pin, int debounceTime, bool defaultToggle=0) : counter(0), pin(pin), debounceTime(debounceTime), toggleBool(defaultToggle) {}
 
         bool getCurrentVal(BelaContext *context, int n) {
             bool val = !digitalRead(context, n, pin);
@@ -158,12 +191,15 @@ bool setup(BelaContext *context, void *userData)
     // Useful calculations
     gAudioFramesPerAnalogFrame = context->audioFrames / context->analogFrames;
 
+    // TODO: Move to classes
     pinMode(context, 0, P8_07, OUTPUT);
     pinMode(context, 0, P8_08, INPUT);
     pinMode(context, 0, P8_09, INPUT);
 
-    gDebouncedButton1 = DebouncedButton(P8_08, 1.02*context->audioSampleRate);
-    gDebouncedButton2 = DebouncedButton(P8_09, 1.02*context->audioSampleRate);
+    gLED = LED(P8_07, 0.05*context->audioSampleRate);
+
+    gDebouncedButton1 = DebouncedButton(P8_08, 0.1*context->audioSampleRate);
+    gDebouncedButton2 = DebouncedButton(P8_09, 0.1*context->audioSampleRate);
     return true;
 }
 
@@ -175,6 +211,7 @@ bool setup(BelaContext *context, void *userData)
 void render(BelaContext *context, void *userData)
 {
     for(unsigned int n=0; n<context->digitalFrames; n++){
+        /*
         bool button1 = gDebouncedButton1.getCurrentVal(context, n);
         bool button2 = gDebouncedButton2.getCurrentVal(context, n);
         //False value means the button is pressed due to the use of a pull up
@@ -203,17 +240,25 @@ void render(BelaContext *context, void *userData)
             startPlayingDrum(4);
         }
         gPrevTriggerButton2 = gTriggerButton2;
+        */
 
-        int interval = round(1*context->audioSampleRate);
+        if(!(n % gAudioFramesPerAnalogFrame)) {
+            // On even audio samples: read analog inputs and update frequency and amplitude
+            gEventIntervalMilliseconds = map(analogRead(context, n/gAudioFramesPerAnalogFrame, 4), 0.0, 0.84, 0.05, 1.0);
+        }
+
+        int interval = round(gEventIntervalMilliseconds*context->audioSampleRate);
         // Increment counter every sample
-
-        /*
-        gSampleCounter++;
-        if(gSampleCounter == interval) {
+        //rt_printf("%d\n", gDebouncedButton2.getCurrentToggle(context, n));
+        if(gDebouncedButton2.getCurrentToggle(context, n))
+            gSampleCounter++;
+        if(gSampleCounter >= interval) {
             gSampleCounter = 0;
             startNextEvent();
+            //digitalWrite(context, n, P8_07, 1);
+            gLED.trigger();
         }
-        */
+        gLED.onIfActive(context, n);
 
         float out = 0;
         for(int i=0; i<gDrumBufferForReadPointer.size(); i++) {
@@ -224,7 +269,7 @@ void render(BelaContext *context, void *userData)
                     out += gDrumSampleBuffers[currentBuff][currentPtr];
                     gReadPointers[i]++;
                 }
-                else 
+                else
                 {
                     gReadPointers[i] = 0;
                     gDrumBufferForReadPointer[i] = -1;
