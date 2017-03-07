@@ -52,7 +52,7 @@ extern int gPatternLengths[NUMBER_OF_PATTERNS];
 /* These variables indicate which pattern we're playing, and
  * where within the pattern we currently are. Used in Step 4c.
  */
-int gCurrentPattern = 2;
+int gCurrentPattern = 0;
 int gCurrentIndexInPattern = 0;
 
 /* Triggers from buttons (step 2 etc.). Read these here and
@@ -272,7 +272,7 @@ LED gLED;
 class DebouncedButton {
     public:
         DebouncedButton() {}
-        DebouncedButton(int pin, int debounceTime, bool defaultToggle=0) : counter(0), pin(pin), debounceTime(debounceTime), toggleBool(defaultToggle) {}
+        DebouncedButton(int pin, int debounceTime, bool defaultToggle=false) : counter(0), pin(pin), debounceTime(debounceTime), toggleBool(defaultToggle) {}
 
         bool getCurrentVal(BelaContext *context, int n) {
             bool val = !digitalRead(context, n, pin);
@@ -297,12 +297,12 @@ class DebouncedButton {
         bool getCurrentToggle(BelaContext *context, int n) {
             bool val = this->getCurrentVal(context, n);
 
-            if(prevTogVal == false && val == true) {
+            if(prevTogVal == true && val == false) {
                 toggleBool = !toggleBool;
             }
             prevTogVal = val;
 
-            return toggleBool;
+            return !toggleBool;
         }
     private:
         int counter;
@@ -370,7 +370,14 @@ void render(BelaContext *context, void *userData)
             gEventIntervalMilliseconds = map(analogRead(context, n/gAudioFramesPerAnalogFrame, 4), 0.0, 0.84, 0.05, 1.0);
             gAccelerometer.calibrate(context, n);
             if(!gAccelerometer.curentlyCalibrating()) {
-                rt_printf("%d\n", gAccelerometer.calculateOrientation(context, n));
+                int orientation = gAccelerometer.calculateOrientation(context, n);
+                if(orientation < 6) {
+                    gCurrentPattern = orientation-1;
+                    gPlaysBackwards = false;
+                }
+                else {
+                    gPlaysBackwards = true;
+                }
             }
         }
 
@@ -392,14 +399,26 @@ void render(BelaContext *context, void *userData)
             int currentBuff = gDrumBufferForReadPointer[i];
             int currentPtr = gReadPointers[i];
             if(gDrumBufferForReadPointer[i] > -1) {
-                if(gReadPointers[i] < gDrumSampleBufferLengths[currentBuff]) {
-                    out += gDrumSampleBuffers[currentBuff][currentPtr];
-                    gReadPointers[i]++;
-                }
-                else
-                {
-                    gReadPointers[i] = 0;
-                    gDrumBufferForReadPointer[i] = -1;
+                if(gPlaysBackwards){
+                    if(gReadPointers[i] < gDrumSampleBufferLengths[currentBuff]) {
+                        out += gDrumSampleBuffers[currentBuff][gDrumSampleBufferLengths[currentBuff] - currentPtr];
+                        gReadPointers[i]++;
+                    }
+                    else
+                    {
+                        gReadPointers[i] = 0;
+                        gDrumBufferForReadPointer[i] = -1;
+                    }
+                } else {
+                    if(gReadPointers[i] < gDrumSampleBufferLengths[currentBuff]) {
+                        out += gDrumSampleBuffers[currentBuff][currentPtr];
+                        gReadPointers[i]++;
+                    }
+                    else
+                    {
+                        gReadPointers[i] = 0;
+                        gDrumBufferForReadPointer[i] = -1;
+                    }
                 }
             }
         }
