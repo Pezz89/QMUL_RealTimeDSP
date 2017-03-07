@@ -52,7 +52,7 @@ extern int gPatternLengths[NUMBER_OF_PATTERNS];
 /* These variables indicate which pattern we're playing, and
  * where within the pattern we currently are. Used in Step 4c.
  */
-int gCurrentPattern = 1;
+int gCurrentPattern = 2;
 int gCurrentIndexInPattern = 0;
 
 /* Triggers from buttons (step 2 etc.). Read these here and
@@ -116,10 +116,10 @@ class Accelerometer {
         }
 
         float readZ(BelaContext *context, int n) {
-            float val = analogRead(context, n/gAudioFramesPerAnalogFrame, pinZ);
+            float val = (5.0 / 3.3) * analogRead(context, n/gAudioFramesPerAnalogFrame, pinZ);
             // On even audio samples: read analog input and return z value
             if(!needsCalibrating)
-                val -= averageZ;
+                val = map(val, 1-averageZ, averageZ, -1.0, 1.0);
             return val;
         }
 
@@ -129,28 +129,98 @@ class Accelerometer {
                     *itX = readX(context, n);
                     *itY = readY(context, n);
                     *itZ = readZ(context, n);
-                    rt_printf("X: %f\n", *itX);
                     itX++;
                     itY++;
                     itZ++;
                 }
-                else 
+                else
                 {
                     averageX = accumulate(calibrationSamplesX.begin(), calibrationSamplesX.end(), 0.0)/calibrationSamplesX.size();
                     averageY = accumulate(calibrationSamplesY.begin(), calibrationSamplesY.end(), 0.0)/calibrationSamplesY.size();
                     averageZ = accumulate(calibrationSamplesZ.begin(), calibrationSamplesZ.end(), 0.0)/calibrationSamplesZ.size();
-                    rt_printf("averageX: %f\n", averageX);
                     needsCalibrating = false;
                 }
             }
         }
+
+        enum orientation {
+            upright = 1,
+            left,
+            right,
+            front,
+            back,
+            upsidedown
+        };
+
+        int calculateOrientation(BelaContext *context, int n) {
+            float x = readX(context, n);
+            float y = readY(context, n);
+            float z = readZ(context, n);
+
+            int xOrient = hysterisisThreshold(x, -0.2, -0.1, hysts[0]) + hysterisisThreshold(x, 0.1, 0.2, hysts[1]);
+            int yOrient = hysterisisThreshold(y, -0.2, -0.1, hysts[2]) + hysterisisThreshold(y, 0.1, 0.2, hysts[3]);
+            int zOrient = hysterisisThreshold(z, -0.5, -0.3, hysts[4]) + hysterisisThreshold(z, 0.3, 0.5, hysts[5]);
+
+            if(xOrient == 1 && yOrient == 1 && zOrient == 2) {
+                prevOrient = upright;
+                return upright;
+            }
+            if(xOrient == 0 && yOrient == 1 && zOrient == 1) {
+                prevOrient = left;
+                return left;
+            }
+            if(xOrient == 2 && yOrient == 1 && zOrient == 1) {
+                prevOrient = right;
+                return right;
+            }
+            if(xOrient == 1 && yOrient == 0 && zOrient == 1) {
+                prevOrient = front;
+                return front;
+            }
+            if(xOrient == 1 && yOrient == 2 && zOrient == 1) {
+                prevOrient = back;
+                return back;
+            }
+            if(xOrient == 1 && yOrient == 1 && zOrient == 0) {
+                prevOrient = upsidedown;
+                return upsidedown;
+            }
+            else {
+                return prevOrient;
+            }
+        }
+
+        bool hysterisisThreshold(float val, float low, float high, bool& hyst) {
+            switch(hyst)
+            {
+                case false:
+                    if(val < high)
+                        return 0;
+                    else
+                        hyst = true;
+                        return 1;
+                    break;
+                case true:
+                    if(val > low)
+                        return 1;
+                    else
+                        hyst = false;
+                        return 0;
+                    break;
+            }
+        }
+
 
         bool curentlyCalibrating() {
             return needsCalibrating;
         }
 
     private:
-        int pinX, pinY, pinZ;
+        int pinX, pinY, pinZ = 0;
+
+        bool hysts[9] = {false};
+
+        int prevOrient = upright;
 
         bool needsCalibrating = true;
         float averageX = 0;
@@ -295,43 +365,12 @@ bool setup(BelaContext *context, void *userData)
 void render(BelaContext *context, void *userData)
 {
     for(unsigned int n=0; n<context->digitalFrames; n++){
-        /*
-        bool button1 = gDebouncedButton1.getCurrentVal(context, n);
-        bool button2 = gDebouncedButton2.getCurrentVal(context, n);
-        //False value means the button is pressed due to the use of a pull up
-        //resistor
-        if(button1 == true){
-            gTriggerButton1 = 1;
-        }
-        else
-        {
-            gTriggerButton1 = 0;
-        }
-        if(gTriggerButton1 && gTriggerButton1 != gPrevTriggerButton1) {
-            startPlayingDrum(3);
-            startPlayingDrum(0);
-        }
-        gPrevTriggerButton1 = gTriggerButton1;
-
-        if(button2 == true){
-            gTriggerButton2 = 1;
-        }
-        else
-        {
-            gTriggerButton2 = 0;
-        }
-        if(gTriggerButton2 && gTriggerButton2 != gPrevTriggerButton2) {
-            startPlayingDrum(4);
-        }
-        gPrevTriggerButton2 = gTriggerButton2;
-        */
-
-        if(!(n % gAudioFramesPerAnalogFrame)) {
+        if(!(n % gAudioFramesPerAnalogFrame*8192*8192)) {
             // On even audio samples: read analog inputs and update frequency and amplitude
             gEventIntervalMilliseconds = map(analogRead(context, n/gAudioFramesPerAnalogFrame, 4), 0.0, 0.84, 0.05, 1.0);
             gAccelerometer.calibrate(context, n);
             if(!gAccelerometer.curentlyCalibrating()) {
-                rt_printf("%f\n", gAccelerometer.readX(context, n));
+                rt_printf("%d\n", gAccelerometer.calculateOrientation(context, n));
             }
         }
 
