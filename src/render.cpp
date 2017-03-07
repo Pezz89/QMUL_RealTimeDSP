@@ -101,17 +101,25 @@ class Accelerometer {
 
         float readX(BelaContext *context, int n) {
             // On even audio samples: read analog input and return x value
-            return analogRead(context, n/gAudioFramesPerAnalogFrame, pinX);
+            float val = analogRead(context, n/gAudioFramesPerAnalogFrame, pinX);
+            if(!needsCalibrating)
+                val -= averageX;
+            return val;
         }
 
         float readY(BelaContext *context, int n) {
             // On even audio samples: read analog input and return y value
-            return analogRead(context, n/gAudioFramesPerAnalogFrame, pinY);
+            float val = analogRead(context, n/gAudioFramesPerAnalogFrame, pinY);
+            if(!needsCalibrating)
+                val -= averageY;
+            return val;
         }
 
         float readZ(BelaContext *context, int n) {
             float val = analogRead(context, n/gAudioFramesPerAnalogFrame, pinZ);
             // On even audio samples: read analog input and return z value
+            if(!needsCalibrating)
+                val -= averageZ;
             return val;
         }
 
@@ -136,6 +144,11 @@ class Accelerometer {
                 }
             }
         }
+
+        bool curentlyCalibrating() {
+            return needsCalibrating;
+        }
+
     private:
         int pinX, pinY, pinZ;
 
@@ -317,6 +330,9 @@ void render(BelaContext *context, void *userData)
             // On even audio samples: read analog inputs and update frequency and amplitude
             gEventIntervalMilliseconds = map(analogRead(context, n/gAudioFramesPerAnalogFrame, 4), 0.0, 0.84, 0.05, 1.0);
             gAccelerometer.calibrate(context, n);
+            if(!gAccelerometer.curentlyCalibrating()) {
+                rt_printf("%f\n", gAccelerometer.readX(context, n));
+            }
         }
 
         int interval = round(gEventIntervalMilliseconds*context->audioSampleRate);
