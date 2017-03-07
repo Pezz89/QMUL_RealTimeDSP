@@ -21,6 +21,7 @@
 #include "drums.h"
 #include <array>
 #include <vector>
+#include <algorithm>
 
 /* Variables which are given to you: */
 
@@ -90,12 +91,12 @@ class Accelerometer {
     public:
         Accelerometer() {}
         Accelerometer(BelaContext *context, int pin1, int pin2, int pin3) : pinX(pin1), pinY(pin2), pinZ(pin3) {
-            calibrationSamplesX.resize(context.audioSampleRate*0.5);
-            calibrationSamplesY.resize(context.audioSampleRate*0.5);
-            calibrationSamplesZ.resize(context.audioSampleRate*0.5);
-            itX = calibrationSamplesX.begin()
-            itY = calibrationSamplesY.begin()
-            itZ = calibrationSamplesZ.begin()
+            calibrationSamplesX.resize(context->audioSampleRate*0.5);
+            calibrationSamplesY.resize(context->audioSampleRate*0.5);
+            calibrationSamplesZ.resize(context->audioSampleRate*0.5);
+            itX = calibrationSamplesX.begin();
+            itY = calibrationSamplesY.begin();
+            itZ = calibrationSamplesZ.begin();
         }
 
         float readX(BelaContext *context, int n) {
@@ -116,17 +117,21 @@ class Accelerometer {
 
         void calibrate(BelaContext *context, int n) {
             if(needsCalibrating) {
-                if(itX != calibrationSamplesX.end())
+                if(itX != calibrationSamplesX.end()) {
                     *itX = readX(context, n);
                     *itY = readY(context, n);
                     *itZ = readZ(context, n);
+                    rt_printf("X: %f\n", *itX);
                     itX++;
                     itY++;
                     itZ++;
-                else {
-                    averageX = accumulate(calibrationSamplesX.begin(), calibrationSamplesX.end(), 0.0)/calibrationSamplesX.size()
-                    averageY = accumulate(calibrationSamplesY.begin(), calibrationSamplesY.end(), 0.0)/calibrationSamplesY.size()
-                    averageZ = accumulate(calibrationSamplesZ.begin(), calibrationSamplesZ.end(), 0.0)/calibrationSamplesZ.size()
+                }
+                else 
+                {
+                    averageX = accumulate(calibrationSamplesX.begin(), calibrationSamplesX.end(), 0.0)/calibrationSamplesX.size();
+                    averageY = accumulate(calibrationSamplesY.begin(), calibrationSamplesY.end(), 0.0)/calibrationSamplesY.size();
+                    averageZ = accumulate(calibrationSamplesZ.begin(), calibrationSamplesZ.end(), 0.0)/calibrationSamplesZ.size();
+                    rt_printf("averageX: %f\n", averageX);
                     needsCalibrating = false;
                 }
             }
@@ -265,7 +270,7 @@ bool setup(BelaContext *context, void *userData)
     gDebouncedButton1 = DebouncedButton(P8_08, 0.1*context->audioSampleRate);
     gDebouncedButton2 = DebouncedButton(P8_09, 0.1*context->audioSampleRate);
 
-    gAccelerometer = Accelerometer(7, 6, 5);
+    gAccelerometer = Accelerometer(context, 7, 6, 5);
     return true;
 }
 
@@ -311,6 +316,7 @@ void render(BelaContext *context, void *userData)
         if(!(n % gAudioFramesPerAnalogFrame)) {
             // On even audio samples: read analog inputs and update frequency and amplitude
             gEventIntervalMilliseconds = map(analogRead(context, n/gAudioFramesPerAnalogFrame, 4), 0.0, 0.84, 0.05, 1.0);
+            gAccelerometer.calibrate(context, n);
         }
 
         int interval = round(gEventIntervalMilliseconds*context->audioSampleRate);
@@ -377,7 +383,6 @@ void startNextEvent() {
             startPlayingDrum(i);
     }
     gCurrentIndexInPattern = (gCurrentIndexInPattern+1+currentPatterLength)%currentPatterLength;
-    rt_printf("%d\n", sizeof(gDrumSampleBuffers) / sizeof(float*));
 }
 
 /* Returns whether the given event contains the given drum sound */
