@@ -1,3 +1,4 @@
+
 /*
  * assignment2_drums
  *
@@ -19,6 +20,7 @@
 #include <cmath>
 #include "drums.h"
 #include <array>
+#include <vector>
 
 /* Variables which are given to you: */
 
@@ -83,6 +85,68 @@ int gPreviousPattern = 0;
 int gAudioFramesPerAnalogFrame;
 
 int gSampleCounter = 0;
+
+class Accelerometer {
+    public:
+        Accelerometer() {}
+        Accelerometer(BelaContext *context, int pin1, int pin2, int pin3) : pinX(pin1), pinY(pin2), pinZ(pin3) {
+            calibrationSamplesX.resize(context.audioSampleRate*0.5);
+            calibrationSamplesY.resize(context.audioSampleRate*0.5);
+            calibrationSamplesZ.resize(context.audioSampleRate*0.5);
+            itX = calibrationSamplesX.begin()
+            itY = calibrationSamplesY.begin()
+            itZ = calibrationSamplesZ.begin()
+        }
+
+        float readX(BelaContext *context, int n) {
+            // On even audio samples: read analog input and return x value
+            return analogRead(context, n/gAudioFramesPerAnalogFrame, pinX);
+        }
+
+        float readY(BelaContext *context, int n) {
+            // On even audio samples: read analog input and return y value
+            return analogRead(context, n/gAudioFramesPerAnalogFrame, pinY);
+        }
+
+        float readZ(BelaContext *context, int n) {
+            float val = analogRead(context, n/gAudioFramesPerAnalogFrame, pinZ);
+            // On even audio samples: read analog input and return z value
+            return val;
+        }
+
+        void calibrate(BelaContext *context, int n) {
+            if(needsCalibrating) {
+                if(itX != calibrationSamplesX.end())
+                    *itX = readX(context, n);
+                    *itY = readY(context, n);
+                    *itZ = readZ(context, n);
+                    itX++;
+                    itY++;
+                    itZ++;
+                else {
+                    averageX = accumulate(calibrationSamplesX.begin(), calibrationSamplesX.end(), 0.0)/calibrationSamplesX.size()
+                    averageY = accumulate(calibrationSamplesY.begin(), calibrationSamplesY.end(), 0.0)/calibrationSamplesY.size()
+                    averageZ = accumulate(calibrationSamplesZ.begin(), calibrationSamplesZ.end(), 0.0)/calibrationSamplesZ.size()
+                    needsCalibrating = false;
+                }
+            }
+        }
+    private:
+        int pinX, pinY, pinZ;
+
+        bool needsCalibrating = true;
+        float averageX = 0;
+        float averageY = 0;
+        float averageZ = 0;
+        std::vector<float> calibrationSamplesX;
+        std::vector<float>::iterator itX;
+        std::vector<float> calibrationSamplesY;
+        std::vector<float>::iterator itY;
+        std::vector<float> calibrationSamplesZ;
+        std::vector<float>::iterator itZ;
+};
+
+Accelerometer gAccelerometer;
 
 class LED {
     public:
@@ -200,6 +264,8 @@ bool setup(BelaContext *context, void *userData)
 
     gDebouncedButton1 = DebouncedButton(P8_08, 0.1*context->audioSampleRate);
     gDebouncedButton2 = DebouncedButton(P8_09, 0.1*context->audioSampleRate);
+
+    gAccelerometer = Accelerometer(7, 6, 5);
     return true;
 }
 
