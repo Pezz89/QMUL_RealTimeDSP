@@ -5,7 +5,7 @@
 \DeclareLanguageMapping{british}{british-apa}
 \usepackage{url}
 \usepackage{float}
-\usepackage[labelformat=empty]{caption}
+\usepackage{caption}
 \restylefloat{table}
 \usepackage{perpage}
 \MakePerPage{footnote}
@@ -72,21 +72,95 @@
 \begin{document}
 \title{ECS732U --- Real-time DSP}
 \subtitle{\LARGE{Assignment 2 Report}}
-\author{Sam Perry --- ec16039}
+\author{Sam Perry --- EC16039}
 
 \maketitle
 
 \section{Design process}
-\section{Implementation}
-Diagram goes here
-\section{Features}
-\subsection{Button de-bouncing}
-\subsection{Reverse samples}
-\subsection{Accelerometer calibration, reading and mapping}
-\subsection{Tap detection}
-\subsection{Mapping tempo to the Y axis}
-\subsection{Drum sample replacement}
+Due to the detailed instructions of this assignment, the design process for the
+majority of the project, aside from the bonus features, was largely a process
+of following the instructions provided. Sections would be added and tested
+using the \texttt{gdb} debugger to check that they worked as expected. The most
+significant components of the drum machine, such as buttons, the LED and the
+accelerometer, were encapsulated in classes to allow for more manageable code.
+These classes were then expanded to include additions such as ``debouncers''
+for the buttons, and calibration for the accelerometer. A significant amount of
+code involved testing for conditions and performing the relevant actions
+accordingly. This is detailed in section~\ref{Implementation}. However, the
+majority of effort in this project was in the implementation of bonus features
+and code that was not detailed specifically in the instructions. This is
+detailed in section~\ref{Features}.
 
+\section{Implementation}\label{Implementation}
+The project focused on the concept of states, where the drum machine's output
+would vary based on it's current state, which could be modified by the user.
+For this reason, a significant portion of the code focused on testing
+conditions and outputting audio accordingly. This has been illustrated using a
+state machine diagram in figure~\ref{RTDSP}. This diagram focuses primarily on
+the drum sample playback and shows how the state of components, such as the
+button and accelerometer, affected the output of the audio processor. For
+example, it can be seen that the drum pattern chosen, as well as it's tempo,
+is decided by the state of the accelerometer and potentiometer.
+
+\section{Features}\label{Features}
+Figure~\ref{RTDSP} gives a general overview of the audio processing structure
+in this project. However, it neglects the lower level details such as the
+processing of states within the buttons, accelerometer, LEDs etc\ldots A number of
+bonus features were also added to the project.
+
+\subsection{Button de-bouncing}
+A \texttt{DebouncedButton} class was added to try and negate the double tap
+effect that can occur with the buttons used in this project. This was
+implemented by allowing a set period of time to pass after the button had been
+pressed where it was assumed to be on. A value of 50ms was used which
+effectively removed double-taps, whilst maintaining responsiveness.
+
+\subsection{Accelerometer calibration, reading and mapping}
+In order to classify the drum machine as being in one of six orientations, data
+from the accelerometer needed to be processed and mapped to create meaningful
+output. A calibration function was created to allow samples to be read in for
+half a second at the start of the program. The mean of these samples would then
+be used in the mapping of the data to provide more accurate classification.
+Hysteresis were also implemented to create smooth transitions between
+classifications of the six orientations. This accounted for the noise in data
+produced by the accelerometer. The result was a class method capable of
+reliably outputting an integer relating to each of the six possible orientations.
+
+\subsection{Reverse samples}
+Reverse playback of samples was implemented by indexing drum buffers from their
+last sample back towards index 0 when the drum machine was positioned upside
+down. This was implemented alongside the pattern switching code and allowed for
+seamless switching between all patterns in both forward and reverse playback
+based on the orientation of the drum machine.
+
+\subsection{Tap detection}
+Tap detection was implemented using a high pass filter class written originally
+for assignment 1. By filtering out low frequency data, a static threshold could
+then be applied to the remaining data to detect sharp increases in Z axis data.
+This could then trigger the playing of a fill pattern. This worked effectively,
+although this feature may benefit from further tuning of the threshold and
+filter cut-off frequency.
+
+\subsection{Mapping tempo to the Y axis}
+A second button was added to the project that would re-assign tempo data from
+the potentiometer to the Y axis of the accelerometer. This was implemented
+through a simple remapping of the Y axis data to an appropriate range and the
+setting of the interval using this data as opposed to that of the
+potentiometer.
+
+\subsection{Drum sample replacement}
+The \texttt{-{}-bonus} argument also replaced the default samples with an
+alternative set of samples. This was achieved by modifying the filepath read on
+initialisation of the program to point to the location of the alternative
+sample in the \texttt{main.cpp} function. 
+
+\newpage
+\section{Figures}
+\begin{figure}[H]
+    \caption{State machine diagram of project}
+    \makebox[\textwidth]{\includegraphics[width=1.1\textwidth]{RTDSP}}
+    \label{RTDSP}
+\end{figure}
 
 
 \end{document}
