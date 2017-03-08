@@ -23,7 +23,6 @@
 #include <vector>
 #include <algorithm>
 #include "filter.h"
-#include "userOptions.h"
 
 /* Variables which are given to you: */
 
@@ -349,8 +348,7 @@ bool gBonus = false;
 bool setup(BelaContext *context, void *userData)
 {
 
-    if(userData != 0)
-        gBonus = (*(UserOpts *)userData).bonus;
+    rt_printf("%d\n", gBonus);
     gDrumBufferForReadPointer.fill(-1);
     gReadPointers.fill(0);
 
@@ -418,6 +416,10 @@ void render(BelaContext *context, void *userData)
         int interval = round(gEventIntervalMilliseconds*context->audioSampleRate);
         // Increment counter every sample
         //rt_printf("%d\n", gDebouncedButton2.getCurrentToggle(context, n));
+        if(gDebouncedButton1.getCurrentToggle(context, n))
+            gBonus = true;
+        else
+            gBonus = false;
         if(gDebouncedButton2.getCurrentToggle(context, n))
             gSampleCounter++;
         if(gSampleCounter >= interval) {

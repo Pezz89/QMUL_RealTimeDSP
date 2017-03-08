@@ -22,8 +22,9 @@
 #include <getopt.h>
 #include <sndfile.h>
 #include <Bela.h>
+#include <vector>
+#include <string>
 #include "drums.h"
-#include "userOptions.h"
 
 using namespace std;
 
@@ -41,6 +42,7 @@ int gDrumSampleBufferLengths[NUMBER_OF_DRUMS];
 int *gPatterns[NUMBER_OF_PATTERNS];
 int gPatternLengths[NUMBER_OF_PATTERNS];
 
+bool gAlternateDrums = false;
 // Handle Ctrl-C by requesting that the audio rendering stop
 void interrupt_handler(int var)
 {
@@ -64,7 +66,11 @@ int initDrums() {
     char filename[64];
 
     for(int i = 0; i < NUMBER_OF_DRUMS; i++) {
-        snprintf(filename, 64, "drums/drum%d.wav", i);
+        if(gAlternateDrums){
+            snprintf(filename, 64, "drums2/drum%d.wav", i);
+        } else {
+            snprintf(filename, 64, "drums/drum%d.wav", i);
+        }
 
         if (!(sndfile = sf_open (filename, SFM_READ, &sfinfo))) {
             rt_printf("Couldn't open file %s\n", filename);
@@ -169,10 +175,20 @@ void cleanupPatterns() {
         free(gPatterns[i]);
 }
 
+
 int main(int argc, char *argv[])
 {
     BelaInitSettings  settings; // Standard audio settings
-    UserOpts uOpts = {true};
+
+
+
+    // Taken from: http://stackoverflow.com/questions/5183203/checking-argv-against-a-string-c
+    std::vector<std::string> args(argv, argv+argc);
+    for (size_t i = 1; i < args.size(); ++i) {
+        if (args[i] == "--bonus") {
+            gAlternateDrums = true;
+        }
+    }
 
     struct option customOptions[] =
     {
@@ -190,16 +206,15 @@ int main(int argc, char *argv[])
         if ((c = Bela_getopt_long(argc, argv, "hf:", customOptions, &settings)) < 0)
                 break;
         switch (c) {
-        case 'h':
-                usage(basename(argv[0]));
-                exit(0);
-        case 'b':
-                uOpts.bonus = true;
-                break;
-        case '?':
-        default:
-                usage(basename(argv[0]));
-                exit(1);
+            case 'h':
+                    usage(basename(argv[0]));
+                    exit(0);
+            case 'b':
+                    break;
+            case '?':
+            default:
+                    usage(basename(argv[0]));
+                    exit(1);
         }
     }
 
@@ -211,7 +226,7 @@ int main(int argc, char *argv[])
     initPatterns();
 
     // Initialise the PRU audio device
-    if(Bela_initAudio(&settings, &uOpts) != 0) {
+    if(Bela_initAudio(&settings, 0) != 0) {
         cout << "Error: unable to initialise audio" << endl;
         return -1;
     }
