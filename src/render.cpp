@@ -22,6 +22,7 @@
 #include <array>
 #include <vector>
 #include <algorithm>
+#include "filter.h"
 
 /* Variables which are given to you: */
 
@@ -97,6 +98,8 @@ class Accelerometer {
             itX = calibrationSamplesX.begin();
             itY = calibrationSamplesY.begin();
             itZ = calibrationSamplesZ.begin();
+
+            spikeFilter = Filter(900.0, context->audioSampleRate*0.5, true);
         }
 
         float readX(BelaContext *context, int n) {
@@ -161,6 +164,14 @@ class Accelerometer {
             int yOrient = hysterisisThreshold(y, -0.2, -0.1, hysts[2]) + hysterisisThreshold(y, 0.1, 0.2, hysts[3]);
             int zOrient = hysterisisThreshold(z, -0.5, -0.3, hysts[4]) + hysterisisThreshold(z, 0.3, 0.5, hysts[5]);
 
+
+            float filteredZ = spikeFilter.applyFilter(z);
+            if(filteredZ > 0.3) {
+                rt_printf("%f\n", filteredZ);
+            }
+            //hysterisisThreshold(x, -0.2, -0.1, hysts[0])
+            //gShouldPlayFill 
+
             if(xOrient == 1 && yOrient == 1 && zOrient == 2) {
                 prevOrient = upright;
                 return upright;
@@ -223,6 +234,9 @@ class Accelerometer {
         int prevOrient = upright;
 
         bool needsCalibrating = true;
+
+        Filter spikeFilter;
+
         float averageX = 0;
         float averageY = 0;
         float averageZ = 0;
@@ -365,7 +379,7 @@ bool setup(BelaContext *context, void *userData)
 void render(BelaContext *context, void *userData)
 {
     for(unsigned int n=0; n<context->digitalFrames; n++){
-        if(!(n % gAudioFramesPerAnalogFrame*8192*8192)) {
+        if(!(n % gAudioFramesPerAnalogFrame)) {
             // On even audio samples: read analog inputs and update frequency and amplitude
             gEventIntervalMilliseconds = map(analogRead(context, n/gAudioFramesPerAnalogFrame, 4), 0.0, 0.84, 0.05, 1.0);
             gAccelerometer.calibrate(context, n);
