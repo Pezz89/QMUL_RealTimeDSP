@@ -82,6 +82,7 @@ int gPlaysBackwards = 0;
  * (temporary pattern) which is triggered by tapping the board.
  */
 int gShouldPlayFill = 0;
+bool gStartOfFill = false;
 int gPreviousPattern = 0;
 
 int gAudioFramesPerAnalogFrame;
@@ -167,10 +168,9 @@ class Accelerometer {
 
             float filteredZ = spikeFilter.applyFilter(z);
             if(filteredZ > 0.3) {
-                rt_printf("%f\n", filteredZ);
+                gShouldPlayFill = 1;
+                gStartOfFill = true;
             }
-            //hysterisisThreshold(x, -0.2, -0.1, hysts[0])
-            //gShouldPlayFill 
 
             if(xOrient == 1 && yOrient == 1 && zOrient == 2) {
                 prevOrient = upright;
@@ -408,6 +408,7 @@ void render(BelaContext *context, void *userData)
         }
         gLED.onIfActive(context, n);
 
+
         float out = 0;
         for(int i=0; i<gDrumBufferForReadPointer.size(); i++) {
             int currentBuff = gDrumBufferForReadPointer[i];
@@ -465,10 +466,22 @@ void startPlayingDrum(int drumIndex) {
 /* Start playing the next event in the pattern */
 void startNextEvent() {
     /* TODO in Step 4 */
+    if(gShouldPlayFill) {
+        gPreviousPattern = gCurrentPattern;
+        gCurrentPattern = FILL_PATTERN;
+    }
+    if(gStartOfFill) {
+        gCurrentIndexInPattern = 0;
+        gStartOfFill = false;
+    }
     const int currentPatterLength = gPatternLengths[gCurrentPattern];
     for(int i = 0; i < sizeof(gDrumSampleBuffers) * sizeof(float*); i++){
         if(eventContainsDrum(gPatterns[gCurrentPattern][gCurrentIndexInPattern], i))
             startPlayingDrum(i);
+    }
+    if(gCurrentIndexInPattern == currentPatterLength-1 && gCurrentPattern == FILL_PATTERN) {
+        gCurrentPattern = gPreviousPattern;
+        gShouldPlayFill = false;
     }
     gCurrentIndexInPattern = (gCurrentIndexInPattern+1+currentPatterLength)%currentPatterLength;
 }
