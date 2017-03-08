@@ -23,6 +23,7 @@
 #include <vector>
 #include <algorithm>
 #include "filter.h"
+#include "userOptions.h"
 
 /* Variables which are given to you: */
 
@@ -343,9 +344,13 @@ DebouncedButton gDebouncedButton2;
 // in from the call to initAudio().
 //
 // Return true on success; returning false halts the program.
+bool gBonus = false;
 
 bool setup(BelaContext *context, void *userData)
 {
+
+    if(userData != 0)
+        gBonus = (*(UserOpts *)userData).bonus;
     gDrumBufferForReadPointer.fill(-1);
     gReadPointers.fill(0);
 
@@ -381,16 +386,31 @@ void render(BelaContext *context, void *userData)
     for(unsigned int n=0; n<context->digitalFrames; n++){
         if(!(n % gAudioFramesPerAnalogFrame)) {
             // On even audio samples: read analog inputs and update frequency and amplitude
-            gEventIntervalMilliseconds = map(analogRead(context, n/gAudioFramesPerAnalogFrame, 4), 0.0, 0.84, 0.05, 1.0);
             gAccelerometer.calibrate(context, n);
             if(!gAccelerometer.curentlyCalibrating()) {
                 int orientation = gAccelerometer.calculateOrientation(context, n);
-                if(orientation < 6) {
-                    gCurrentPattern = orientation-1;
-                    gPlaysBackwards = false;
+
+                if(gBonus) {
+                    float y = gAccelerometer.readY(context, n);
+                    gEventIntervalMilliseconds = map(y, -0.2, 0.2, 0.05, 0.6);
+                    if(orientation < 4) {
+                        gCurrentPattern = orientation-1;
+                        gPlaysBackwards = false;
+                    }
+                    else if(orientation == 6) {
+                        gPlaysBackwards = true;
+                    }
+
                 }
                 else {
-                    gPlaysBackwards = true;
+                    gEventIntervalMilliseconds = map(analogRead(context, n/gAudioFramesPerAnalogFrame, 4), 0.0, 0.84, 0.05, 1.0);
+                    if(orientation < 6) {
+                        gCurrentPattern = orientation-1;
+                        gPlaysBackwards = false;
+                    }
+                    else {
+                        gPlaysBackwards = true;
+                    }
                 }
             }
         }

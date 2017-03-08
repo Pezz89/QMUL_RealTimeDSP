@@ -23,6 +23,7 @@
 #include <sndfile.h>
 #include <Bela.h>
 #include "drums.h"
+#include "userOptions.h"
 
 using namespace std;
 
@@ -171,10 +172,12 @@ void cleanupPatterns() {
 int main(int argc, char *argv[])
 {
     BelaInitSettings  settings; // Standard audio settings
+    UserOpts uOpts = {true};
 
     struct option customOptions[] =
     {
         {"help", 0, NULL, 'h'},
+        {"bonus", 0, NULL, 'b'},
         {NULL, 0, NULL, 0}
     };
 
@@ -190,6 +193,9 @@ int main(int argc, char *argv[])
         case 'h':
                 usage(basename(argv[0]));
                 exit(0);
+        case 'b':
+                uOpts.bonus = true;
+                break;
         case '?':
         default:
                 usage(basename(argv[0]));
@@ -205,7 +211,7 @@ int main(int argc, char *argv[])
     initPatterns();
 
     // Initialise the PRU audio device
-    if(Bela_initAudio(&settings, 0) != 0) {
+    if(Bela_initAudio(&settings, &uOpts) != 0) {
         cout << "Error: unable to initialise audio" << endl;
         return -1;
     }
