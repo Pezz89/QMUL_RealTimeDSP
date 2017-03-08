@@ -190,6 +190,9 @@ int main(int argc, char *argv[])
         if (args[i] == "--bonus") {
             gAlternateDrums = true;
         }
+        else {
+            gAlternateDrums = false;
+        }
     }
 
     // Bonus flag added here to avoid unknown command line argument error

@@ -40,8 +40,10 @@ int gIsPlaying = 0;         /* Whether we should play or not. Implement this in 
  * holding each read pointer, the other saying which buffer
  * each read pointer corresponds to.
  */
-std::array<int, 16> gReadPointers;
-std::array<int, 16> gDrumBufferForReadPointer;
+// 32 Read pointers allocated to allow for faster tempos than was possible with
+// 16
+std::array<int, 32> gReadPointers;
+std::array<int, 32> gDrumBufferForReadPointer;
 
 /* Patterns indicate which drum(s) should play on which beat.
  * Each element of gPatterns is an array, whose length is given
@@ -93,18 +95,22 @@ class Accelerometer {
     public:
         Accelerometer() {}
         Accelerometer(BelaContext *context, int pin1, int pin2, int pin3) : pinX(pin1), pinY(pin2), pinZ(pin3) {
+            // Allocate half a second's worth of samples for calibration
             calibrationSamplesX.resize(context->audioSampleRate*0.5);
             calibrationSamplesY.resize(context->audioSampleRate*0.5);
             calibrationSamplesZ.resize(context->audioSampleRate*0.5);
+            // Declaire iterators for each buffer
             itX = calibrationSamplesX.begin();
             itY = calibrationSamplesY.begin();
             itZ = calibrationSamplesZ.begin();
 
+            // Create a filter object for tap detection
             spikeFilter = Filter(900.0, context->audioSampleRate*0.5, true);
         }
 
         float readX(BelaContext *context, int n) {
-            // On even audio samples: read analog input and return x value
+            // If the accelerometer isn't calibrating, return the X axis value
+            // - the calibration offset, else just return the original value.
             float val = analogRead(context, n/gAudioFramesPerAnalogFrame, pinX);
             if(!needsCalibrating)
                 val -= averageX;
@@ -112,7 +118,8 @@ class Accelerometer {
         }
 
         float readY(BelaContext *context, int n) {
-            // On even audio samples: read analog input and return y value
+            // If the accelerometer isn't calibrating, return the Y axis value
+            // - the calibration offset, else just return the original value.
             float val = analogRead(context, n/gAudioFramesPerAnalogFrame, pinY);
             if(!needsCalibrating)
                 val -= averageY;
@@ -121,14 +128,19 @@ class Accelerometer {
 
         float readZ(BelaContext *context, int n) {
             float val = (5.0 / 3.3) * analogRead(context, n/gAudioFramesPerAnalogFrame, pinZ);
-            // On even audio samples: read analog input and return z value
+            // If the accelerometer isn't calibrating, return the Z axis value
+            // mapped to the -1.0-1.0 range, else just return the original
+            // value.
             if(!needsCalibrating)
                 val = map(val, 1-averageZ, averageZ, -1.0, 1.0);
             return val;
         }
 
         void calibrate(BelaContext *context, int n) {
+            // Run calibration only if it has not already been calibrated,
             if(needsCalibrating) {
+                // For the current index in the calibration buffer, read the sample in
+                // and increment the write pointer
                 if(itX != calibrationSamplesX.end()) {
                     *itX = readX(context, n);
                     *itY = readY(context, n);
@@ -139,14 +151,19 @@ class Accelerometer {
                 }
                 else
                 {
+                    // Calculate the mean for each axis, and store these values
+                    // for the offset of future values read from the
+                    // accelerometer.
                     averageX = accumulate(calibrationSamplesX.begin(), calibrationSamplesX.end(), 0.0)/calibrationSamplesX.size();
                     averageY = accumulate(calibrationSamplesY.begin(), calibrationSamplesY.end(), 0.0)/calibrationSamplesY.size();
                     averageZ = accumulate(calibrationSamplesZ.begin(), calibrationSamplesZ.end(), 0.0)/calibrationSamplesZ.size();
+                    // Set calibration flag to signal that it is finished.
                     needsCalibrating = false;
                 }
             }
         }
 
+        // Enumeration of the different orientations possible
         enum orientation {
             upright = 1,
             left,
@@ -157,21 +174,30 @@ class Accelerometer {
         };
 
         int calculateOrientation(BelaContext *context, int n) {
+            // Read calibrated value of X, Y and Z
             float x = readX(context, n);
             float y = readY(context, n);
             float z = readZ(context, n);
 
+            // Apply hysteresis thresholds to values in order to determine if it
+            // is in one of three positions.
             int xOrient = hysterisisThreshold(x, -0.2, -0.1, hysts[0]) + hysterisisThreshold(x, 0.1, 0.2, hysts[1]);
             int yOrient = hysterisisThreshold(y, -0.2, -0.1, hysts[2]) + hysterisisThreshold(y, 0.1, 0.2, hysts[3]);
             int zOrient = hysterisisThreshold(z, -0.5, -0.3, hysts[4]) + hysterisisThreshold(z, 0.3, 0.5, hysts[5]);
 
 
+            // Filter low frequency movements of the Z axis, allowing for
+            // easier detection of high frequency taps
             float filteredZ = spikeFilter.applyFilter(z);
+            // Set a threshold with which to detect taps and set drum fill
+            // variables when a tap is detected
             if(filteredZ > 0.3) {
                 gShouldPlayFill = 1;
                 gStartOfFill = true;
             }
 
+            // Calculate orientation of drum machine based on combined
+            // positions of X, Y and Z values
             if(xOrient == 1 && yOrient == 1 && zOrient == 2) {
                 prevOrient = upright;
                 return upright;
@@ -202,22 +228,24 @@ class Accelerometer {
         }
 
         bool hysterisisThreshold(float val, float low, float high, bool& hyst) {
-            switch(hyst)
+            // Vary threshold values based on current value and current
+            // threshold. Threshold depends on the current value and the
+            // threshold set by previous values
+            if(hyst)
             {
-                case false:
-                    if(val < high)
-                        return 0;
-                    else
-                        hyst = true;
-                        return 1;
-                    break;
-                case true:
-                    if(val > low)
-                        return 1;
-                    else
-                        hyst = false;
-                        return 0;
-                    break;
+                if(val > low)
+                    return 1;
+                else
+                    hyst = false;
+                    return 0;
+            }
+            else
+            {
+                if(val < high)
+                    return 0;
+                else
+                    hyst = true;
+                    return 1;
             }
         }
 
@@ -229,8 +257,10 @@ class Accelerometer {
     private:
         int pinX, pinY, pinZ = 0;
 
+        // Array of bools to store current threshold states in hysteresis
         bool hysts[9] = {false};
 
+        // Keep track of the previous orientation of the drum machine
         int prevOrient = upright;
 
         bool needsCalibrating = true;
@@ -256,19 +286,25 @@ class LED {
         LED(int pin, int time) : pin(pin), interval(time){}
 
         void trigger() {
+            // Trigger the LED to be illuminated and reset the timer
             active = true;
             timer = 0;
         }
 
         void onIfActive(BelaContext *context, int n) {
+            // If the LED has been illuminated for the required duration, turn
+            // it off and reset the timer
             if(timer > interval) {
                 active = false;
                 timer = 0;
             }
+            // If the LED is on then write this out to the digital pin and
+            // increment the times
             if(active) {
                 digitalWrite(context, n, P8_07, 1);
                 timer++;
             }
+            // Otherwise, turn the LED off
             else {
                 digitalWrite(context, n, P8_07, 0);
             }
@@ -503,10 +539,14 @@ void render(BelaContext *context, void *userData)
 /* Start playing a particular drum sound given by drumIndex.
  */
 void startPlayingDrum(int drumIndex) {
+    // Find the first inactive read pointer
     for(int i=0; i<gReadPointers.size(); i++) {
         if(gDrumBufferForReadPointer[i] == -1) {
+            // When a read pointer is found, give it a new drum buffer index
+            // and set it to start at the first index in the buffer.
             gDrumBufferForReadPointer[i] = drumIndex;
             gReadPointers[i] = 0;
+            // Stop searching for inactive pointers...
             break;
         }
     }
@@ -514,24 +554,33 @@ void startPlayingDrum(int drumIndex) {
 
 /* Start playing the next event in the pattern */
 void startNextEvent() {
-    /* TODO in Step 4 */
     if(gShouldPlayFill) {
+        // save the previous pattern to return to after the fill has been
+        // played
         gPreviousPattern = gCurrentPattern;
+        // Set the current pattern to the pre-determined fill pattern
         gCurrentPattern = FILL_PATTERN;
     }
     if(gStartOfFill) {
+        // At the start of the fill, set the pattern index to 0, so that the
+        // fill starts at the beginning
         gCurrentIndexInPattern = 0;
         gStartOfFill = false;
     }
+    // Get the length of the current pattern
     const int currentPatterLength = gPatternLengths[gCurrentPattern];
+    // Check for drum events in the current index of the pattern, and play
+    // relevant samples.
     for(int i = 0; i < sizeof(gDrumSampleBuffers) * sizeof(float*); i++){
         if(eventContainsDrum(gPatterns[gCurrentPattern][gCurrentIndexInPattern], i))
             startPlayingDrum(i);
     }
+    // If the fill pattern has finished, go back to the previous pattern
     if(gCurrentIndexInPattern == currentPatterLength-1 && gCurrentPattern == FILL_PATTERN) {
         gCurrentPattern = gPreviousPattern;
         gShouldPlayFill = false;
     }
+    // Wrap indexes to always be within the range of the current pattern.
     gCurrentIndexInPattern = (gCurrentIndexInPattern+1+currentPatterLength)%currentPatterLength;
 }
 
