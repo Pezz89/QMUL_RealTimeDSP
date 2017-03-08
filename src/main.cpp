@@ -66,6 +66,7 @@ int initDrums() {
     char filename[64];
 
     for(int i = 0; i < NUMBER_OF_DRUMS; i++) {
+        // Select drums samples folder to load based on command like argument.
         if(gAlternateDrums){
             snprintf(filename, 64, "drums2/drum%d.wav", i);
         } else {
@@ -180,9 +181,10 @@ int main(int argc, char *argv[])
 {
     BelaInitSettings  settings; // Standard audio settings
 
-
-
     // Taken from: http://stackoverflow.com/questions/5183203/checking-argv-against-a-string-c
+    // A bit of a hack to avoid using the undocumented command line parser for
+    // Bela. Searches for the bonus flag and sets the alternate drums toggle
+    // accordingly.
     std::vector<std::string> args(argv, argv+argc);
     for (size_t i = 1; i < args.size(); ++i) {
         if (args[i] == "--bonus") {
@@ -190,6 +192,7 @@ int main(int argc, char *argv[])
         }
     }
 
+    // Bonus flag added here to avoid unknown command line argument error
     struct option customOptions[] =
     {
         {"help", 0, NULL, 'h'},

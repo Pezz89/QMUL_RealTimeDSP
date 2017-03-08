@@ -288,19 +288,30 @@ class DebouncedButton {
         DebouncedButton() {}
         DebouncedButton(int pin, int debounceTime, bool defaultToggle=false) : counter(0), pin(pin), debounceTime(debounceTime), toggleBool(defaultToggle) {}
 
+        // Reads value if enough time has past since the last positive
+        // button reading
         bool getCurrentVal(BelaContext *context, int n) {
+            // Inverted to account for the way that the buttons were wired to
+            // produce 0s on press
             bool val = !digitalRead(context, n, pin);
+            // If the button was previously off but is now on then start the
+            // counter
             if(val == true && prevDBVal == false) {
                 prevDBVal = val;
                 counter++;
             }
+            // If the button is now off but the debounce time has not elapsed
+            // then it is assumed to be a bounce and remains on.
             else if(val == false && prevDBVal == true && counter < debounceTime) {
                 val = true;
                 counter++;
             }
+            // If it is still on then just increment the counter.
             else if (val == true && prevDBVal == true) {
                 counter++;
             }
+            // if the debounce time has elapsed at it is no longer on then set
+            // the button to the off state and reset the counter.
             else {
                 prevDBVal = val;
                 counter = 0;
@@ -308,14 +319,21 @@ class DebouncedButton {
             return val;
         }
 
+        // Use this function to convert buttons to toggles. These will return
+        // 0 or 1 constatntly until the button is pressed again.
         bool getCurrentToggle(BelaContext *context, int n) {
+            // Get the current debounced button value
             bool val = this->getCurrentVal(context, n);
 
+            // if it has been pressed then toggle the toggle.
             if(prevTogVal == true && val == false) {
                 toggleBool = !toggleBool;
             }
             prevTogVal = val;
 
+            // return inverted toggle value. Somwhere the button value has
+            // become inverted accidentally... Doesn't cause any problems and
+            // buttons all work fine though...
             return !toggleBool;
         }
     private:
@@ -325,33 +343,26 @@ class DebouncedButton {
         bool prevDBVal;
         bool prevTogVal;
         bool toggleBool;
-
-        //bool toggleVal;
 };
 
 
+// Create two global button variables, one for each physical button
 DebouncedButton gDebouncedButton1;
 DebouncedButton gDebouncedButton2;
 
-/* TODO: Declare any further global variables you need here */
-
-// setup() is called once before the audio rendering starts.
-// Use it to perform any initialisation and allocation which is dependent
-// on the period size or sample rate.
-//
-// userData holds an opaque pointer to a data structure that was passed
-// in from the call to initAudio().
-//
-// Return true on success; returning false halts the program.
+// Boolean for storing whether bonus features are enabled or not.
 bool gBonus = false;
 
 bool setup(BelaContext *context, void *userData)
 {
-
-    rt_printf("%d\n", gBonus);
+    // Fill all read pointer pointers to -1, signaling that they are currently
+    // unused
     gDrumBufferForReadPointer.fill(-1);
+    // Set all read pointers to the starting index of their buffers.
     gReadPointers.fill(0);
 
+    // Code from one of the examples... Havent had time to work out whether
+    // it's neccesary or not but doesn't do any harm.
     if(context->analogFrames == 0 || context->analogFrames > context->audioFrames) {
         rt_printf("Error: this example needs analog enabled, with 4 channels\n");
         return false;
@@ -360,17 +371,22 @@ bool setup(BelaContext *context, void *userData)
     // Useful calculations
     gAudioFramesPerAnalogFrame = context->audioFrames / context->analogFrames;
 
-    // TODO: Move to classes
+    // Activate digital pins for buttons and LED. Should have been put in their
+    // classes really
     pinMode(context, 0, P8_07, OUTPUT);
     pinMode(context, 0, P8_08, INPUT);
     pinMode(context, 0, P8_09, INPUT);
 
+    // Create an instance of the LED object for handeling LED related output
     gLED = LED(P8_07, 0.05*context->audioSampleRate);
 
+    // Create instance of the buttons for reading input later
     gDebouncedButton1 = DebouncedButton(P8_08, 0.1*context->audioSampleRate);
     gDebouncedButton2 = DebouncedButton(P8_09, 0.1*context->audioSampleRate);
 
+    // Create n acceerometer instance for reading in later
     gAccelerometer = Accelerometer(context, 7, 6, 5);
+
     return true;
 }
 
@@ -381,16 +397,25 @@ bool setup(BelaContext *context, void *userData)
 
 void render(BelaContext *context, void *userData)
 {
+    // For every sample in the current block...
     for(unsigned int n=0; n<context->digitalFrames; n++){
+        // For every sample of the analog inputs in the current block...
         if(!(n % gAudioFramesPerAnalogFrame)) {
-            // On even audio samples: read analog inputs and update frequency and amplitude
+            // Run calibration for the first half a second of the program
             gAccelerometer.calibrate(context, n);
+            // When calibration has finished, begin processing analog inputs
             if(!gAccelerometer.curentlyCalibrating()) {
+                // Caluclate the orientation of the drum machine as one of 6
+                // orientations
                 int orientation = gAccelerometer.calculateOrientation(context, n);
 
+                // If bonus features are active...
                 if(gBonus) {
+                    // Map tempo to the Y axis of the accelerometer
                     float y = gAccelerometer.readY(context, n);
                     gEventIntervalMilliseconds = map(y, -0.2, 0.2, 0.05, 0.6);
+                    // for all other orientations, change the drum pattern or
+                    // play samples backwards as normal.
                     if(orientation < 4) {
                         gCurrentPattern = orientation-1;
                         gPlaysBackwards = false;
@@ -401,11 +426,18 @@ void render(BelaContext *context, void *userData)
 
                 }
                 else {
+                    // Map the input of the potentiometer to the interval time
+                    // in milliseconds. This allows for tempo adjustments using
+                    // the pot.
                     gEventIntervalMilliseconds = map(analogRead(context, n/gAudioFramesPerAnalogFrame, 4), 0.0, 0.84, 0.05, 1.0);
+                    // For each of the 5 orientations, set the current pattern
+                    // to that orientation's index
                     if(orientation < 6) {
                         gCurrentPattern = orientation-1;
                         gPlaysBackwards = false;
                     }
+                    // If the board is upside down (orientation no. 6) set the
+                    // reverse samples flag
                     else {
                         gPlaysBackwards = true;
                     }
@@ -413,21 +445,25 @@ void render(BelaContext *context, void *userData)
             }
         }
 
+        //Calculate the integer interval in samples
         int interval = round(gEventIntervalMilliseconds*context->audioSampleRate);
-        // Increment counter every sample
-        //rt_printf("%d\n", gDebouncedButton2.getCurrentToggle(context, n));
+        // Set Bonus 
         if(gDebouncedButton1.getCurrentToggle(context, n))
             gBonus = true;
         else
             gBonus = false;
+        // If the toggle is on then increment the counter (play samples)
         if(gDebouncedButton2.getCurrentToggle(context, n))
             gSampleCounter++;
+        // When enough samples have elapsed, play the next beat.
         if(gSampleCounter >= interval) {
             gSampleCounter = 0;
             startNextEvent();
-            //digitalWrite(context, n, P8_07, 1);
+            // Also trigger an LED
             gLED.trigger();
         }
+        // If the LED has been triggered, then light up for a specific amount
+        // of time.
         gLED.onIfActive(context, n);
 
 
