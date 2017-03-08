@@ -355,7 +355,7 @@ bool gBonus = false;
 
 bool setup(BelaContext *context, void *userData)
 {
-    // Fill all read pointer pointers to -1, signaling that they are currently
+    // Set all read pointers to -1, signaling that they are currently
     // unused
     gDrumBufferForReadPointer.fill(-1);
     // Set all read pointers to the starting index of their buffers.
@@ -468,50 +468,41 @@ void render(BelaContext *context, void *userData)
 
 
         float out = 0;
+        // For each read pointer that isn't currently active
         for(int i=0; i<gDrumBufferForReadPointer.size(); i++) {
             int currentBuff = gDrumBufferForReadPointer[i];
             int currentPtr = gReadPointers[i];
             if(gDrumBufferForReadPointer[i] > -1) {
-                if(gPlaysBackwards){
-                    if(gReadPointers[i] < gDrumSampleBufferLengths[currentBuff]) {
+                if(gReadPointers[i] < gDrumSampleBufferLengths[currentBuff]) {
+                    // If samples need to be played in reverse...
+                    if(gPlaysBackwards){
+                        // Read samples backwards from the end of the buffer.
                         out += gDrumSampleBuffers[currentBuff][gDrumSampleBufferLengths[currentBuff] - currentPtr];
-                        gReadPointers[i]++;
-                    }
-                    else
-                    {
-                        gReadPointers[i] = 0;
-                        gDrumBufferForReadPointer[i] = -1;
-                    }
-                } else {
-                    if(gReadPointers[i] < gDrumSampleBufferLengths[currentBuff]) {
+                    } else {
+                        // Read samples fowards from the current buffer using
+                        // it's allocated pointer
                         out += gDrumSampleBuffers[currentBuff][currentPtr];
-                        gReadPointers[i]++;
                     }
-                    else
-                    {
-                        gReadPointers[i] = 0;
-                        gDrumBufferForReadPointer[i] = -1;
-                    }
+                    gReadPointers[i]++;
+                }
+                else
+                {
+                    // If the buffer has reached the end/start of the buffer,
+                    // then reset pointer and mark it as free to use
+                    gReadPointers[i] = 0;
+                    gDrumBufferForReadPointer[i] = -1;
                 }
             }
         }
+        // write out audio
         audioWrite(context, n, 0, out);
         audioWrite(context, n, 1, out);
     }
-    /* TODO: your audio processing code goes here! */
-
-    /* Step 2: use gReadPointer to play a drum sound */
-
-    /* Step 3: use multiple read pointers to play multiple drums */
-
-    /* Step 4: count samples and decide when to trigger the next event */
 }
 
 /* Start playing a particular drum sound given by drumIndex.
  */
 void startPlayingDrum(int drumIndex) {
-    /* TODO in Steps 3a and 3b */
-
     for(int i=0; i<gReadPointers.size(); i++) {
         if(gDrumBufferForReadPointer[i] == -1) {
             gDrumBufferForReadPointer[i] = drumIndex;
