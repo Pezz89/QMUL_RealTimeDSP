@@ -80,6 +80,14 @@ def main():
             plt.axhline(threshold, linestyle='--', color='g')
             plt.show()
 
+        # Calculate the interval between adjacent peaks
+        peakDiff = np.diff(peaks)
+        pDMean = np.mean(peakDiff)
+        pDStd = np.std(peakDiff)
+        lowIntervalLim = pDMean - pDStd
+        highIntervalLim = pDMean + pDStd
+
+        peaks = peaks[peakDiff < lowIntervalLim]
         pdb.set_trace()
 
 
