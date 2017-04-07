@@ -11,10 +11,11 @@ import matplotlib.pyplot as plt
 import peakutils
 from peakutils.plot import plot as pplot
 from numpy.lib.stride_tricks import as_strided
+import numpy.ma as ma
 
-plotFigures1 = True
-plotFigures2 = True
-plotFigures3 = True
+plotFigures1 = False
+plotFigures2 = False
+plotFigures3 = False
 
 
 def main():
@@ -74,7 +75,8 @@ def main():
             plt.xlabel('Time (samples)')
             plt.show()
 
-        peaks = indexes(Pa, thres=threshold)
+        # Create a masked array of indexes for each peak found in Pa
+        peaks = ma.array(indexes(Pa, thres=threshold))
 
         if plotFigures2:
             pplot(x, Pa, peaks)
@@ -102,11 +104,27 @@ def main():
             peakIndex1 = peaks[inds[0]]
             peakIndex2 = peaks[inds[1]]
             # Calculate time difference between indexes
-            indexDiff = (x[peakIndex2]-x[peakIndex1])*fs
-            pdb.set_trace()
+            indexDiff = (x[peakIndex2]-x[peakIndex1])/fs
+            # Calculate the ratio between first and second peaks amplitude
+            # If time diference is less than 50ms...
+            if indexDiff < 0.05:
+                # If first peak is more than half the amplitude of the second,
+                # reject the second peak, else reject the first
+                if Pa[peakIndex1] > (Pa[peakIndex2] / 2):
+                    peaks[inds[1]] = ma.masked
+                else:
+                    peaks[inds[0]] = ma.masked
+                    pdb.set_trace()
+            else:
+                # If the first peak's energy is higher than that of the second
+                # peak Calculate mean and variance of every other interval
+                # before the current interval
+                if Pa[peakIndex1] > Pa[peakIndex2]:
+                # If current interval is more or less than the mean +/- the
+                # variance, remove first peak, else remove the second peak
+                else:
+                    peaks[inds[0]] = ma.masked
 
-            Pa[peakIndex1]
-            Pa[peakIndex2]
 
         if plotFigures3:
             pplot(x, Pa, peaks)
