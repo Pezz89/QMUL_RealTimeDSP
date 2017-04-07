@@ -12,8 +12,9 @@ import peakutils
 from peakutils.plot import plot as pplot
 from numpy.lib.stride_tricks import as_strided
 
-plotFigures1 = False
+plotFigures1 = True
 plotFigures2 = True
+plotFigures3 = True
 
 
 def main():
@@ -23,7 +24,7 @@ def main():
     for filepath in PCGFiles:
         # Read audio in
         sndfile = pysndfile.PySndfile(filepath, 'r')
-        data = x = sndfile.read_frames()
+        data = sig = sndfile.read_frames()
         fs = sndfile.samplerate()
         # Downsampling is no longer neccesary as recording have already been
         # downsampled in the validation set.
@@ -35,7 +36,7 @@ def main():
         '''
 
         # Normalise signal
-        x /= np.max(np.abs(x))
+        sig /= np.max(np.abs(sig))
 
         # Split signal into 0.02 second overlapping grains with 0.01 second
         # overlap
@@ -43,10 +44,10 @@ def main():
         N = winSize = int(0.02 * fs)
 
         # Window signal
-        x = rolling_window(x, winSize, hopSize)
+        sig = rolling_window(sig, winSize, hopSize)
 
         # Calculate average shannon energy
-        E_s = (-1/N) * np.sum((x**2)*np.log(x**2), axis=1)
+        E_s = (-1/N) * np.sum((sig**2)*np.log(sig**2), axis=1)
         # Set nan values created by a log(0) to 0
         E_s[np.isnan(E_s)] = 0
 
@@ -54,12 +55,15 @@ def main():
         mE_s = np.mean(E_s)
         sE_s = np.std(E_s)
         Pa = (E_s - mE_s)/sE_s
+        x = ((np.arange(Pa.size)*hopSize)+np.round(winSize/2)).astype(int)
+
+        # Calculate timings for each analysis window
+        # x = np.linspace(np.round(winSize/2), data.shape[-1]-np.round(winSize/2), Pa.size)
 
         threshold = 0.5
 
         if plotFigures1:
             plt.subplot(2, 1, 1)
-            x = np.linspace(0, data.shape[-1], Pa.size)
             plt.plot(x, Pa)
             plt.xlim([fs*1, fs*4])
             plt.axhline(threshold, linestyle='--', color='g')
@@ -73,7 +77,6 @@ def main():
         peaks = indexes(Pa, thres=threshold)
 
         if plotFigures2:
-            x = np.linspace(0, data.shape[-1], Pa.size)
             pplot(x, Pa, peaks)
             plt.xlim([fs*1, fs*4])
             plt.xlabel('Time (samples)')
@@ -84,10 +87,33 @@ def main():
         peakDiff = np.diff(peaks)
         pDMean = np.mean(peakDiff)
         pDStd = np.std(peakDiff)
+        # Calculate high and low interval limits using mean and standard
+        # deviation
         lowIntervalLim = pDMean - pDStd
         highIntervalLim = pDMean + pDStd
+        rejectionCandidates = np.where(peakDiff < lowIntervalLim)[0]
+        # Flip array vertially
+        rejectionCandidates = rejectionCandidates[np.newaxis].T
+        # Create pairs of indexes for peaks to be compared
+        rejectionCandidates = np.hstack((rejectionCandidates, rejectionCandidates+1))
 
-        peaks = peaks[peakDiff < lowIntervalLim]
+        for inds in rejectionCandidates:
+            # Get index location of peaks to potentially be rejected
+            peakIndex1 = peaks[inds[0]]
+            peakIndex2 = peaks[inds[1]]
+            # Calculate time difference between indexes
+            indexDiff = (x[peakIndex2]-x[peakIndex1])*fs
+            pdb.set_trace()
+
+            Pa[peakIndex1]
+            Pa[peakIndex2]
+
+        if plotFigures3:
+            pplot(x, Pa, peaks)
+            plt.xlim([fs*1, fs*4])
+            plt.xlabel('Time (samples)')
+            plt.axhline(threshold, linestyle='--', color='g')
+            plt.show()
         pdb.set_trace()
 
 
