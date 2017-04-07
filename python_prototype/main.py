@@ -15,7 +15,7 @@ import numpy.ma as ma
 
 plotFigures1 = False
 plotFigures2 = False
-plotFigures3 = False
+plotFigures3 = True
 
 
 def main():
@@ -99,10 +99,22 @@ def main():
         # Create pairs of indexes for peaks to be compared
         rejectionCandidates = np.hstack((rejectionCandidates, rejectionCandidates+1))
 
-        for inds in rejectionCandidates:
+        for i, inds in enumerate(rejectionCandidates):
+            # If a candidate has been previously masked...
+
+            '''
+            if ma.is_masked(peaks[inds[0]]):
+                # Find the last unmasked candidate
+                inds[0] = peaks.data[inds[0]]
+                getLastUnmaskedCandidate(rejectionCandidates, peaks, i)
+
+                # If there are none less than the interval limit then continue
+                if (inds[0] < 0) or (inds[0] > lowIntervalLim):
+                    continue
+            '''
             # Get index location of peaks to potentially be rejected
-            peakIndex1 = peaks[inds[0]]
-            peakIndex2 = peaks[inds[1]]
+            peakIndex1 = peaks.data[inds[0]]
+            peakIndex2 = peaks.data[inds[1]]
             # Calculate time difference between indexes
             indexDiff = (x[peakIndex2]-x[peakIndex1])/fs
             # Calculate the ratio between first and second peaks amplitude
@@ -114,20 +126,40 @@ def main():
                     peaks[inds[1]] = ma.masked
                 else:
                     peaks[inds[0]] = ma.masked
-                    pdb.set_trace()
             else:
                 # If the first peak's energy is higher than that of the second
-                # peak Calculate mean and variance of every other interval
-                # before the current interval
+                # peak
                 if Pa[peakIndex1] > Pa[peakIndex2]:
-                # If current interval is more or less than the mean +/- the
-                # variance, remove first peak, else remove the second peak
+                    # Calculate mean and variance of every 2nd interval
+                    # before the current interval
+                    prevPeaksMask = peaks.mask.copy()
+                    # Mask any peak indexes beyond and including the current interval
+                    prevPeaksMask[inds[1]:] = True
+                    newPeakDiff = np.diff(peaks[~prevPeaksMask])
+                    # Create array of all previous second intervals
+                    secondIntervals = newPeakDiff[1-(newPeakDiff.size % 2)::2]
+                    # Get last calculated interval
+                    lastInterval = secondIntervals[-1]
+                    # Sperate last calculated interval from all other intervals
+                    secondIntervals = secondIntervals[:-1]
+                    pDMean = np.mean(secondIntervals)
+                    pDVar = np.var(secondIntervals)
+
+                    # If current interval is more or less than the mean +/- the
+                    # variance, remove first peak, else remove the second peak
+                    if (lastInterval > pDMean + pDVar) or (lastInterval < pDMean - pDVar):
+                        peaks[inds[0]] = ma.masked
+                    else:
+                        peaks[inds[1]] = ma.masked
+
                 else:
+                    # Else, reject the first peak
                     peaks[inds[0]] = ma.masked
 
+        rejectionCandidates = np.where(peakDiff > highIntervalLim)[0]
 
         if plotFigures3:
-            pplot(x, Pa, peaks)
+            pplot(x, Pa, peaks[~peaks.mask])
             plt.xlim([fs*1, fs*4])
             plt.xlabel('Time (samples)')
             plt.axhline(threshold, linestyle='--', color='g')
@@ -137,6 +169,15 @@ def main():
 
         # Calculate avergae shannon energy of each segment
 
+def getLastUnmaskedCandidate(rejectionCandidates, peaks, i):
+    i -= 1
+    while i > -1:
+        if np.any(~peaks[rejectionCandidates[i]].mask):
+            a = peaks[rejectionCandidates[i]]
+            b = rejectionCandidates[i][~a.mask]
+            return b[-1]
+        i -= 1
+    return -1
 
 def rolling_window(a, window, hopSize):
     # This function was adapted from: http://stackoverflow.com/questions/4936620/using-strides-for-an-efficient-moving-average-filter
