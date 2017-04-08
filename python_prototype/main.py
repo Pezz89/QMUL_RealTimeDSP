@@ -109,7 +109,6 @@ def main():
         inclusionCandidates = inclusionCandidates[np.newaxis].T
         inclusionCandidates = np.hstack((inclusionCandidates, inclusionCandidates+1))
 
-        pdb.set_trace()
         for i, inds in enumerate(inclusionCandidates):
             # Get index location of boundaries in which peaks may have been
             # lost. Use data member to bypass the mask
@@ -123,11 +122,32 @@ def main():
                 reducedThreshold -= reductionAmount
 
                 # Get all peaks that aren't currently masked
-                foundPeaks = indexes(Pa[peakIndex1:peakIndex2], thres=reducedThreshold)
+                foundPeakInds = indexes(Pa[peakIndex1:peakIndex2], thres=reducedThreshold)
+                '''
                 pplot(x[peakIndex1:peakIndex2], Pa[peakIndex1:peakIndex2], foundPeaks)
                 plt.axhline(threshold, linestyle='--', color='r')
                 plt.axhline(reducedThreshold, linestyle='--', color='g')
                 plt.show()
+                '''
+                if np.any(foundPeakInds):
+                    # Offset peaks by starting search index to find their global index
+                    foundPeakInds += peakIndex1
+                    foundPeakInds = np.append(peakIndex1, foundPeakInds)
+                    foundPeakDiff = np.diff(foundPeakInds)
+                    foundRejectionCandidates = np.where(foundPeakDiff < lowIntervalLim)[0]+inds[0]
+                    pdb.set_trace()
+                    # Flip array vertially
+                    foundRejectionCandidates = foundRejectionCandidates[np.newaxis].T
+                    # Create pairs of indexes for peaks to be compared
+                    foundRejectionCandidates = np.hstack((foundRejectionCandidates, foundRejectionCandidates+1))
+                    newPeakInds = filterExtraPeaks(foundRejectionCandidates, peaks, x, fs, Pa)
+                    '''
+                    pplot(x, Pa, foundPeaks)
+                    plt.show()
+                    '''
+
+                    #filterExtraPeaks(, x, fs, Pa)
+
 
         if plotFigures3:
             pplot(x, Pa, peaks[~peaks.mask])
@@ -140,6 +160,8 @@ def main():
 
 
 def filterExtraPeaks(rejectionCandidates, peaks, x, fs, Pa):
+    if not np.ma.isMaskedArray(peaks):
+        peaks = ma.array(peaks)
     for i, inds in enumerate(rejectionCandidates):
         # Get index location of peaks to potentially be rejected
         # Use data member to bypass the mask
@@ -163,6 +185,9 @@ def filterExtraPeaks(rejectionCandidates, peaks, x, fs, Pa):
                 # Calculate mean and variance of every 2nd interval
                 # before the current interval
                 prevPeaksMask = peaks.mask.copy()
+                # TODO: Deal with this edge case
+                # if not isinstance(xx, np.ndarray):
+                #     prevPeaksMask = np.array([prevPeaksMask])
                 # Mask any peak indexes beyond and including the current interval
                 prevPeaksMask[inds[1]:] = True
                 newPeakDiff = np.diff(peaks[~prevPeaksMask])
@@ -203,7 +228,6 @@ def rolling_window(a, window, hopSize):
     if window < 1:
         raise ValueError, "`window` must be at least 1."
     if window > a.shape[-1]:
-        pdb.set_trace()
         raise ValueError, "`window` is too long."
     numWindows = np.ceil((a.shape[-1]-hopSize)/hopSize)
     shape = a.shape[:-1] + (numWindows, window)
@@ -282,12 +306,7 @@ def indexes(y, thres=0.3, min_dist=1):
     boundaries = np.where(np.diff(np.array(y > thres, dtype=int))>0)[0]
     # If there are no boundaries then y is never over the threshold
     if boundaries.shape[0] < 2:
-        pdb.set_trace()
         return np.array([], dtype=int)
-    # If there is one boundary then y never goes back under the threshold
-    if boundaries.shape[0] < 2:
-        boundaries = np.append(boundaries, y.size)
-        pdb.set_trace()
     # Make start-end pairs of boundaries
     boundaries = rolling_window(boundaries, 2, 1)
     out = np.zeros(boundaries.shape[0], dtype=int)
