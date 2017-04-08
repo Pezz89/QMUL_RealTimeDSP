@@ -17,6 +17,9 @@ plotFigures1 = False
 plotFigures2 = False
 plotFigures3 = True
 
+# Define the number of iterations to use when reducing the threshold for lost
+# peaks search
+reductionIterations = 20
 
 def main():
     # Get file names for all PCG data
@@ -99,64 +102,32 @@ def main():
         # Create pairs of indexes for peaks to be compared
         rejectionCandidates = np.hstack((rejectionCandidates, rejectionCandidates+1))
 
-        for i, inds in enumerate(rejectionCandidates):
-            # If a candidate has been previously masked...
+        peaks = filterExtraPeaks(rejectionCandidates, peaks, x, fs, Pa)
 
-            '''
-            if ma.is_masked(peaks[inds[0]]):
-                # Find the last unmasked candidate
-                inds[0] = peaks.data[inds[0]]
-                getLastUnmaskedCandidate(rejectionCandidates, peaks, i)
+        inclusionCandidates = np.where(peakDiff > highIntervalLim)[0]
+        # Flip array vertially
+        inclusionCandidates = inclusionCandidates[np.newaxis].T
+        inclusionCandidates = np.hstack((inclusionCandidates, inclusionCandidates+1))
 
-                # If there are none less than the interval limit then continue
-                if (inds[0] < 0) or (inds[0] > lowIntervalLim):
-                    continue
-            '''
-            # Get index location of peaks to potentially be rejected
+        pdb.set_trace()
+        for i, inds in enumerate(inclusionCandidates):
+            # Get index location of boundaries in which peaks may have been
+            # lost. Use data member to bypass the mask
             peakIndex1 = peaks.data[inds[0]]
             peakIndex2 = peaks.data[inds[1]]
-            # Calculate time difference between indexes
-            indexDiff = (x[peakIndex2]-x[peakIndex1])/fs
-            # Calculate the ratio between first and second peaks amplitude
-            # If time diference is less than 50ms...
-            if indexDiff < 0.05:
-                # If first peak is more than half the amplitude of the second,
-                # reject the second peak, else reject the first
-                if Pa[peakIndex1] > (Pa[peakIndex2] / 2):
-                    peaks[inds[1]] = ma.masked
-                else:
-                    peaks[inds[0]] = ma.masked
-            else:
-                # If the first peak's energy is higher than that of the second
-                # peak
-                if Pa[peakIndex1] > Pa[peakIndex2]:
-                    # Calculate mean and variance of every 2nd interval
-                    # before the current interval
-                    prevPeaksMask = peaks.mask.copy()
-                    # Mask any peak indexes beyond and including the current interval
-                    prevPeaksMask[inds[1]:] = True
-                    newPeakDiff = np.diff(peaks[~prevPeaksMask])
-                    # Create array of all previous second intervals
-                    secondIntervals = newPeakDiff[1-(newPeakDiff.size % 2)::2]
-                    # Get last calculated interval
-                    lastInterval = secondIntervals[-1]
-                    # Sperate last calculated interval from all other intervals
-                    secondIntervals = secondIntervals[:-1]
-                    pDMean = np.mean(secondIntervals)
-                    pDVar = np.var(secondIntervals)
 
-                    # If current interval is more or less than the mean +/- the
-                    # variance, remove first peak, else remove the second peak
-                    if (lastInterval > pDMean + pDVar) or (lastInterval < pDMean - pDVar):
-                        peaks[inds[0]] = ma.masked
-                    else:
-                        peaks[inds[1]] = ma.masked
+            reductionAmount = (threshold - np.min(Pa)) / reductionIterations
+            reducedThreshold = threshold - reductionAmount
+            while threshold > np.min(Pa):
+                # Create threshold to be iterativey reduced until peaks are found
+                reducedThreshold -= reductionAmount
 
-                else:
-                    # Else, reject the first peak
-                    peaks[inds[0]] = ma.masked
-
-        rejectionCandidates = np.where(peakDiff > highIntervalLim)[0]
+                # Get all peaks that aren't currently masked
+                foundPeaks = indexes(Pa[peakIndex1:peakIndex2], thres=reducedThreshold)
+                pplot(x[peakIndex1:peakIndex2], Pa[peakIndex1:peakIndex2], foundPeaks)
+                plt.axhline(threshold, linestyle='--', color='r')
+                plt.axhline(reducedThreshold, linestyle='--', color='g')
+                plt.show()
 
         if plotFigures3:
             pplot(x, Pa, peaks[~peaks.mask])
@@ -167,7 +138,55 @@ def main():
         pdb.set_trace()
 
 
-        # Calculate avergae shannon energy of each segment
+
+def filterExtraPeaks(rejectionCandidates, peaks, x, fs, Pa):
+    for i, inds in enumerate(rejectionCandidates):
+        # Get index location of peaks to potentially be rejected
+        # Use data member to bypass the mask
+        peakIndex1 = peaks.data[inds[0]]
+        peakIndex2 = peaks.data[inds[1]]
+        # Calculate time difference between indexes
+        indexDiff = (x[peakIndex2]-x[peakIndex1])/fs
+        # Calculate the ratio between first and second peaks amplitude
+        # If time diference is less than 50ms...
+        if indexDiff < 0.05:
+            # If first peak is more than half the amplitude of the second,
+            # reject the second peak, else reject the first
+            if Pa[peakIndex1] > (Pa[peakIndex2] / 2):
+                peaks[inds[1]] = ma.masked
+            else:
+                peaks[inds[0]] = ma.masked
+        else:
+            # If the first peak's energy is higher than that of the second
+            # peak
+            if Pa[peakIndex1] > Pa[peakIndex2]:
+                # Calculate mean and variance of every 2nd interval
+                # before the current interval
+                prevPeaksMask = peaks.mask.copy()
+                # Mask any peak indexes beyond and including the current interval
+                prevPeaksMask[inds[1]:] = True
+                newPeakDiff = np.diff(peaks[~prevPeaksMask])
+                # Create array of all previous second intervals
+                secondIntervals = newPeakDiff[1-(newPeakDiff.size % 2)::2]
+                # Get last calculated interval
+                lastInterval = secondIntervals[-1]
+                # Sperate last calculated interval from all other intervals
+                secondIntervals = secondIntervals[:-1]
+                pDMean = np.mean(secondIntervals)
+                pDVar = np.var(secondIntervals)
+
+                # If current interval is more or less than the mean +/- the
+                # variance, remove first peak, else remove the second peak
+                if (lastInterval > pDMean + pDVar) or (lastInterval < pDMean - pDVar):
+                    peaks[inds[0]] = ma.masked
+                else:
+                    peaks[inds[1]] = ma.masked
+
+            else:
+                # Else, reject the first peak
+                peaks[inds[0]] = ma.masked
+    return peaks
+
 
 def getLastUnmaskedCandidate(rejectionCandidates, peaks, i):
     i -= 1
@@ -182,9 +201,10 @@ def getLastUnmaskedCandidate(rejectionCandidates, peaks, i):
 def rolling_window(a, window, hopSize):
     # This function was adapted from: http://stackoverflow.com/questions/4936620/using-strides-for-an-efficient-moving-average-filter
     if window < 1:
-       raise ValueError, "`window` must be at least 1."
+        raise ValueError, "`window` must be at least 1."
     if window > a.shape[-1]:
-       raise ValueError, "`window` is too long."
+        pdb.set_trace()
+        raise ValueError, "`window` is too long."
     numWindows = np.ceil((a.shape[-1]-hopSize)/hopSize)
     shape = a.shape[:-1] + (numWindows, window)
     strides = (a.strides[0]*hopSize,) + a.strides[1:-1] + (a.strides[-1],)
@@ -258,13 +278,22 @@ def indexes(y, thres=0.3, min_dist=1):
 
         peaks = np.arange(y.size)[~rem]
 
-    # Find threshold boundaries
+    # Find threshold boundaries, between which, y is over the threshold
     boundaries = np.where(np.diff(np.array(y > thres, dtype=int))>0)[0]
+    # If there are no boundaries then y is never over the threshold
+    if boundaries.shape[0] < 2:
+        pdb.set_trace()
+        return np.array([], dtype=int)
+    # If there is one boundary then y never goes back under the threshold
+    if boundaries.shape[0] < 2:
+        boundaries = np.append(boundaries, y.size)
+        pdb.set_trace()
     # Make start-end pairs of boundaries
     boundaries = rolling_window(boundaries, 2, 1)
     out = np.zeros(boundaries.shape[0], dtype=int)
     # For each threshold boundary, select only the first peak
     for ind, indexes in enumerate(boundaries):
+        peaks[(peaks > indexes[0]) & (peaks < indexes[1])]
         out[ind] = np.min(peaks[(peaks > indexes[0]) & (peaks < indexes[1])])
 
     return out
