@@ -102,7 +102,14 @@ def main():
         # Create pairs of indexes for peaks to be compared
         rejectionCandidates = np.hstack((rejectionCandidates, rejectionCandidates+1))
 
-        peaks = filterExtraPeaks(rejectionCandidates, peaks, x, fs, Pa)
+        peaks = filterExtraPeaks(rejectionCandidates, peaks, peaks, x, fs, Pa, 0)
+
+        if True:
+            pplot(x, Pa, peaks[~peaks.mask])
+            plt.xlim([fs*1, fs*4])
+            plt.xlabel('Time (samples)')
+            plt.axhline(threshold, linestyle='--', color='g')
+            plt.show()
 
         inclusionCandidates = np.where(peakDiff > highIntervalLim)[0]
         # Flip array vertially
@@ -134,13 +141,13 @@ def main():
                     foundPeakInds += peakIndex1
                     foundPeakInds = np.append(peakIndex1, foundPeakInds)
                     foundPeakDiff = np.diff(foundPeakInds)
-                    foundRejectionCandidates = np.where(foundPeakDiff < lowIntervalLim)[0]+inds[0]
-                    pdb.set_trace()
+                    foundRejectionCandidates = np.where(foundPeakDiff < lowIntervalLim)[0]
                     # Flip array vertially
                     foundRejectionCandidates = foundRejectionCandidates[np.newaxis].T
                     # Create pairs of indexes for peaks to be compared
                     foundRejectionCandidates = np.hstack((foundRejectionCandidates, foundRejectionCandidates+1))
-                    newPeakInds = filterExtraPeaks(foundRejectionCandidates, peaks, x, fs, Pa)
+                    newPeakInds = filterExtraPeaks(foundRejectionCandidates, foundPeakInds, peaks, x, fs, Pa, inds[0])
+                    break
                     '''
                     pplot(x, Pa, foundPeaks)
                     plt.show()
@@ -159,14 +166,15 @@ def main():
 
 
 
-def filterExtraPeaks(rejectionCandidates, peaks, x, fs, Pa):
-    if not np.ma.isMaskedArray(peaks):
-        peaks = ma.array(peaks)
+def filterExtraPeaks(rejectionCandidates, candidatePeaks, allPeaks, x, fs, Pa, offset):
+    if not np.ma.isMaskedArray(candidatePeaks):
+        candidatePeaks = ma.array(candidatePeaks)
+        candidatePeaks.mask = np.zeros(candidatePeaks.size, dtype=bool)
     for i, inds in enumerate(rejectionCandidates):
         # Get index location of peaks to potentially be rejected
         # Use data member to bypass the mask
-        peakIndex1 = peaks.data[inds[0]]
-        peakIndex2 = peaks.data[inds[1]]
+        peakIndex1 = candidatePeaks.data[inds[0]]
+        peakIndex2 = candidatePeaks.data[inds[1]]
         # Calculate time difference between indexes
         indexDiff = (x[peakIndex2]-x[peakIndex1])/fs
         # Calculate the ratio between first and second peaks amplitude
@@ -175,26 +183,31 @@ def filterExtraPeaks(rejectionCandidates, peaks, x, fs, Pa):
             # If first peak is more than half the amplitude of the second,
             # reject the second peak, else reject the first
             if Pa[peakIndex1] > (Pa[peakIndex2] / 2):
-                peaks[inds[1]] = ma.masked
+                candidatePeaks[inds[1]] = ma.masked
             else:
-                peaks[inds[0]] = ma.masked
+                candidatePeaks[inds[0]] = ma.masked
         else:
             # If the first peak's energy is higher than that of the second
             # peak
             if Pa[peakIndex1] > Pa[peakIndex2]:
                 # Calculate mean and variance of every 2nd interval
                 # before the current interval
-                prevPeaksMask = peaks.mask.copy()
+                prevPeaksMask = allPeaks.mask.copy()
                 # TODO: Deal with this edge case
                 # if not isinstance(xx, np.ndarray):
                 #     prevPeaksMask = np.array([prevPeaksMask])
                 # Mask any peak indexes beyond and including the current interval
-                prevPeaksMask[inds[1]:] = True
-                newPeakDiff = np.diff(peaks[~prevPeaksMask])
+                prevPeaksMask[offset+inds[1]:] = True
+                newPeakDiff = np.diff(allPeaks[~prevPeaksMask])
                 # Create array of all previous second intervals
                 secondIntervals = newPeakDiff[1-(newPeakDiff.size % 2)::2]
                 # Get last calculated interval
+                if not np.any(secondIntervals.data):
+                    candidatePeaks[inds[1]] = ma.masked
+                    continue
+
                 lastInterval = secondIntervals[-1]
+
                 # Sperate last calculated interval from all other intervals
                 secondIntervals = secondIntervals[:-1]
                 pDMean = np.mean(secondIntervals)
@@ -203,14 +216,14 @@ def filterExtraPeaks(rejectionCandidates, peaks, x, fs, Pa):
                 # If current interval is more or less than the mean +/- the
                 # variance, remove first peak, else remove the second peak
                 if (lastInterval > pDMean + pDVar) or (lastInterval < pDMean - pDVar):
-                    peaks[inds[0]] = ma.masked
+                    candidatePeaks[inds[0]] = ma.masked
                 else:
-                    peaks[inds[1]] = ma.masked
+                    candidatePeaks[inds[1]] = ma.masked
 
             else:
                 # Else, reject the first peak
-                peaks[inds[0]] = ma.masked
-    return peaks
+                candidatePeaks[inds[0]] = ma.masked
+    return candidatePeaks
 
 
 def getLastUnmaskedCandidate(rejectionCandidates, peaks, i):
