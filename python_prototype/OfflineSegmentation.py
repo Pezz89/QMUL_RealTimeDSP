@@ -12,6 +12,8 @@ import peakutils
 from peakutils.plot import plot as pplot
 from numpy.lib.stride_tricks import as_strided
 import numpy.ma as ma
+import os
+import errno
 
 plotFigures1 = False
 plotFigures2 = False
@@ -115,8 +117,8 @@ def main():
         pDStd = np.std(peakDiff)
         # Calculate high and low interval limits using mean and standard
         # deviation
-        lowIntervalLim = pDMean - (pDStd * 1)
-        highIntervalLim = pDMean + (pDStd * 1.0)
+        lowIntervalLim = pDMean - (pDStd * 0.75)
+        highIntervalLim = pDMean + (pDStd * 1.5)
         rejectionCandidates = np.where(peakDiff < lowIntervalLim)[0]
         # Flip array vertially
         rejectionCandidates = rejectionCandidates[np.newaxis].T
@@ -124,6 +126,7 @@ def main():
         rejectionCandidates = np.hstack((rejectionCandidates, rejectionCandidates+1))
 
         peaks = filterExtraPeaks(rejectionCandidates, peaks, peaks, x, fs, Pa, 0)
+
 
         if plotFigures3:
             pplot(x, Pa, peaks[~peaks.mask])
@@ -196,16 +199,12 @@ def main():
         # peaks = filterExtraPeaks(rejectionCandidates, peaks, peaks, x, fs, Pa, 0)
 
         # Get all valid peaks
-        a = peaks
         if np.any(peaks.mask):
             peaks = peaks[~peaks.mask]
         # Calculate the difference between all peaks
             peakDiff = np.diff(peaks)
         # Find the largest interval between all peaks in the last 20 seconds
-        try:
-            diastolicPeriod = np.max(peakDiff)
-        except:
-            pdb.set_trace()
+        diastolicPeriod = np.max(peakDiff)
         # Get index value of last peak
         endPeak = peaks[-1]
         # Find all peaks within the last 20 seconds
@@ -227,10 +226,12 @@ def main():
         # poor recordings...
         if systolicPeriod:
             systolicPeriodsMask = (peakDiff <= systolicPeriod + systolicPeriod * c1) & (peakDiff >= systolicPeriod - systolicPeriod * c1)
-            classification[systolicPeriodsMask] = 2
-        classification[diastolicPeriodsMask] = 1
+            classification[systolicPeriodsMask] = 1
+        classification[diastolicPeriodsMask] = 2
 
-
+        classification = classification[np.newaxis].T
+        times = np.round(x[peaks]/2)[np.newaxis].T
+        results = np.hstack((times[:-1], classification)).astype(int)
 
         if plotFigures4:
             pplot(x, Pa, peaks[~peaks.mask])
@@ -244,7 +245,21 @@ def main():
             plt.plot(x, Pa)
             plt.plot(x[p], classification, "x")
             plt.show()
+        saveResults(filepath, results)
 
+def saveResults(inputFile, results):
+    path = '../OfflineResults/'
+
+    # Create folder if it doesn't already exist
+    try:
+        os.makedirs(path)
+    except OSError as exception:
+        if exception.errno != errno.EEXIST:
+            raise
+
+    inputBasename = os.path.basename(os.path.splitext(inputFile)[0])
+    outputPath = os.path.join(path, inputBasename+"_segs.csv")
+    np.savetxt(outputPath, results, fmt='%i', delimiter=",")
 
 def filterExtraPeaks(rejectionCandidates, candidatePeaks, allPeaks, x, fs, Pa, offset):
     if not np.ma.isMaskedArray(candidatePeaks):
