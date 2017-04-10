@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from __future__ import division
+from __future__ import division, print_function
 import pysndfile
 import scipy.signal as signal
 import scipy.stats as stats
@@ -16,7 +16,8 @@ import numpy.ma as ma
 plotFigures1 = False
 plotFigures2 = False
 plotFigures3 = False
-plotFigures4 = True
+plotFigures4 = False
+plotFigures5 = False
 
 # Define the number of iterations to use when reducing the threshold for lost
 # peaks search
@@ -36,6 +37,7 @@ def main():
 
     # For each PCG data file...
     for filepath in PCGFiles:
+        print("Analysing: {0}".format(filepath))
         # Read audio in
         sndfile = pysndfile.PySndfile(filepath, 'r')
         fs = sndfile.samplerate()
@@ -69,7 +71,7 @@ def main():
         # Calculate average shannon energy
         E_s = (-1/N) * np.sum((sig**2)*np.log(sig**2), axis=1)
         # Set nan values created by a log(0) to 0
-        E_s[np.isnan(E_s)] = 0
+        E_s[~np.isfinite(E_s)] = 0
 
         E_s = moving_average(E_s, n=3)
 
@@ -113,8 +115,8 @@ def main():
         pDStd = np.std(peakDiff)
         # Calculate high and low interval limits using mean and standard
         # deviation
-        lowIntervalLim = pDMean - pDStd * 0.75
-        highIntervalLim = pDMean + (pDStd * 2)
+        lowIntervalLim = pDMean - (pDStd * 1)
+        highIntervalLim = pDMean + (pDStd * 1.0)
         rejectionCandidates = np.where(peakDiff < lowIntervalLim)[0]
         # Flip array vertially
         rejectionCandidates = rejectionCandidates[np.newaxis].T
@@ -145,10 +147,9 @@ def main():
 
             reductionAmount = (threshold - np.min(Pa)) / reductionIterations
             reducedThreshold = threshold - reductionAmount
-            while threshold > np.min(Pa):
+            while reducedThreshold > np.min(Pa):
                 # Create threshold to be iterativey reduced until peaks are found
                 reducedThreshold -= reductionAmount
-
                 # Get all peaks that aren't currently masked
                 foundPeakInds = indexes(Pa[peakIndex1:peakIndex2], thres=reducedThreshold)
                 '''
@@ -195,12 +196,16 @@ def main():
         # peaks = filterExtraPeaks(rejectionCandidates, peaks, peaks, x, fs, Pa, 0)
 
         # Get all valid peaks
-        pdb.set_trace()
-        peaks = peaks[~peaks.mask]
+        a = peaks
+        if np.any(peaks.mask):
+            peaks = peaks[~peaks.mask]
         # Calculate the difference between all peaks
-        peakDiff = np.diff(peaks)
+            peakDiff = np.diff(peaks)
         # Find the largest interval between all peaks in the last 20 seconds
-        diastolicPeriod = np.max(peakDiff)
+        try:
+            diastolicPeriod = np.max(peakDiff)
+        except:
+            pdb.set_trace()
         # Get index value of last peak
         endPeak = peaks[-1]
         # Find all peaks within the last 20 seconds
@@ -212,23 +217,21 @@ def main():
         # Find the largest interval between all peaks in the last 20 seconds
         peaksInRangeDiff = np.diff(peaksInRange)
         diastolicPeriod = np.max(peaksInRangeDiff)
-        # For every peak before the longest peak found,
-            # find peaks before the current peak that are within the range of
-            # the diastolic period
-        # Which peak distance before each disatolic peak appears the most
-        # frequenctly?
-
 
         # Find all diastolic periods
         diastolicPeriodsMask = (peakDiff <= diastolicPeriod + diastolicPeriod * c2) & (peakDiff >= diastolicPeriod - diastolicPeriod * c2)
         otherPeriods = peakDiff[~diastolicPeriodsMask]
         systolicPeriod = np.median(otherPeriods)
-        systolicPeriodsMask = (peakDiff <= systolicPeriod + systolicPeriod * c1) & (peakDiff >= systolicPeriod - systolicPeriod * c1)
         classification = np.zeros(peakDiff.shape)
+        # Handle situation where no systolic segments are detected. Happens in
+        # poor recordings...
+        if systolicPeriod:
+            systolicPeriodsMask = (peakDiff <= systolicPeriod + systolicPeriod * c1) & (peakDiff >= systolicPeriod - systolicPeriod * c1)
+            classification[systolicPeriodsMask] = 2
         classification[diastolicPeriodsMask] = 1
-        classification[systolicPeriodsMask] = 2
 
-        pdb.set_trace()
+
+
         if plotFigures4:
             pplot(x, Pa, peaks[~peaks.mask])
             plt.xlim([fs*1, fs*4])
@@ -236,6 +239,11 @@ def main():
             plt.axhline(threshold, linestyle='--', color='g')
             plt.show()
 
+        if plotFigures5:
+            p = peaks[:-1]
+            plt.plot(x, Pa)
+            plt.plot(x[p], classification, "x")
+            plt.show()
 
 
 def filterExtraPeaks(rejectionCandidates, candidatePeaks, allPeaks, x, fs, Pa, offset):
