@@ -15,21 +15,37 @@ import numpy.ma as ma
 
 plotFigures1 = False
 plotFigures2 = False
-plotFigures3 = True
+plotFigures3 = False
+plotFigures4 = True
 
 # Define the number of iterations to use when reducing the threshold for lost
 # peaks search
 reductionIterations = 20
+# Define tolerances for heart sound classifications
+c1 = 0.15
+c2 = 0.3
+
+def moving_average(a, n=3) :
+    ret = np.cumsum(a, dtype=float)
+    ret[n:] = ret[n:] - ret[:-n]
+    return ret[n - 1:] / n
 
 def main():
     # Get file names for all PCG data
     PCGFiles = glob.glob("../validation_dataset/*.wav")
+
     # For each PCG data file...
     for filepath in PCGFiles:
         # Read audio in
         sndfile = pysndfile.PySndfile(filepath, 'r')
-        data = sig = sndfile.read_frames()
         fs = sndfile.samplerate()
+        sig = data = sndfile.read_frames()
+        '''
+        plt.plot(sig)
+        plt.show()
+        pdb.set_trace()
+        '''
+
         # Downsampling is no longer neccesary as recording have already been
         # downsampled in the validation set.
         '''
@@ -54,6 +70,8 @@ def main():
         E_s = (-1/N) * np.sum((sig**2)*np.log(sig**2), axis=1)
         # Set nan values created by a log(0) to 0
         E_s[np.isnan(E_s)] = 0
+
+        E_s = moving_average(E_s, n=3)
 
         # Normalise average shannon energy
         mE_s = np.mean(E_s)
@@ -80,9 +98,10 @@ def main():
 
         # Create a masked array of indexes for each peak found in Pa
         peaks = ma.array(indexes(Pa, thres=threshold))
+        peaks.mask = np.zeros(peaks.size, dtype=bool)
 
         if plotFigures2:
-            pplot(x, Pa, peaks)
+            pplot(x, Pa, peaks[~peaks.mask])
             plt.xlim([fs*1, fs*4])
             plt.xlabel('Time (samples)')
             plt.axhline(threshold, linestyle='--', color='g')
@@ -94,8 +113,8 @@ def main():
         pDStd = np.std(peakDiff)
         # Calculate high and low interval limits using mean and standard
         # deviation
-        lowIntervalLim = pDMean - pDStd
-        highIntervalLim = pDMean + pDStd
+        lowIntervalLim = pDMean - pDStd * 0.75
+        highIntervalLim = pDMean + (pDStd * 2)
         rejectionCandidates = np.where(peakDiff < lowIntervalLim)[0]
         # Flip array vertially
         rejectionCandidates = rejectionCandidates[np.newaxis].T
@@ -104,7 +123,7 @@ def main():
 
         peaks = filterExtraPeaks(rejectionCandidates, peaks, peaks, x, fs, Pa, 0)
 
-        if True:
+        if plotFigures3:
             pplot(x, Pa, peaks[~peaks.mask])
             plt.xlim([fs*1, fs*4])
             plt.xlabel('Time (samples)')
@@ -116,6 +135,8 @@ def main():
         inclusionCandidates = inclusionCandidates[np.newaxis].T
         inclusionCandidates = np.hstack((inclusionCandidates, inclusionCandidates+1))
 
+
+        newPeaks = []
         for i, inds in enumerate(inclusionCandidates):
             # Get index location of boundaries in which peaks may have been
             # lost. Use data member to bypass the mask
@@ -147,22 +168,73 @@ def main():
                     # Create pairs of indexes for peaks to be compared
                     foundRejectionCandidates = np.hstack((foundRejectionCandidates, foundRejectionCandidates+1))
                     newPeakInds = filterExtraPeaks(foundRejectionCandidates, foundPeakInds, peaks, x, fs, Pa, inds[0])
+                    newPeaks.append(newPeakInds)
                     break
                     '''
                     pplot(x, Pa, foundPeaks)
                     plt.show()
                     '''
+        for inds in newPeaks:
+            peaks = ma.append(peaks, inds)
+            peaks = ma.unique(peaks)
 
-                    #filterExtraPeaks(, x, fs, Pa)
+        # # Calculate the interval between adjacent peaks
+        # peakDiff = np.diff(peaks)
+        # pDMean = np.mean(peakDiff)
+        # pDStd = np.std(peakDiff)
+        # # Calculate high and low interval limits using mean and standard
+        # # deviation
+        # lowIntervalLim = pDMean - pDStd
+        # highIntervalLim = pDMean + pDStd
+        # rejectionCandidates = np.where(peakDiff < lowIntervalLim)[0]
+        # # Flip array vertially
+        # rejectionCandidates = rejectionCandidates[np.newaxis].T
+        # # Create pairs of indexes for peaks to be compared
+        # rejectionCandidates = np.hstack((rejectionCandidates, rejectionCandidates+1))
+
+        # peaks = filterExtraPeaks(rejectionCandidates, peaks, peaks, x, fs, Pa, 0)
+
+        # Get all valid peaks
+        pdb.set_trace()
+        peaks = peaks[~peaks.mask]
+        # Calculate the difference between all peaks
+        peakDiff = np.diff(peaks)
+        # Find the largest interval between all peaks in the last 20 seconds
+        diastolicPeriod = np.max(peakDiff)
+        # Get index value of last peak
+        endPeak = peaks[-1]
+        # Find all peaks within the last 20 seconds
+        peaksInRangeMask = x[np.abs(peaks-endPeak)] < 20*fs
+        peaksInRange = peaks[peaksInRangeMask]
+
+        # Calculate the difference between all peaks
+        peakDiff = np.diff(peaks)
+        # Find the largest interval between all peaks in the last 20 seconds
+        peaksInRangeDiff = np.diff(peaksInRange)
+        diastolicPeriod = np.max(peaksInRangeDiff)
+        # For every peak before the longest peak found,
+            # find peaks before the current peak that are within the range of
+            # the diastolic period
+        # Which peak distance before each disatolic peak appears the most
+        # frequenctly?
 
 
-        if plotFigures3:
+        # Find all diastolic periods
+        diastolicPeriodsMask = (peakDiff <= diastolicPeriod + diastolicPeriod * c2) & (peakDiff >= diastolicPeriod - diastolicPeriod * c2)
+        otherPeriods = peakDiff[~diastolicPeriodsMask]
+        systolicPeriod = np.median(otherPeriods)
+        systolicPeriodsMask = (peakDiff <= systolicPeriod + systolicPeriod * c1) & (peakDiff >= systolicPeriod - systolicPeriod * c1)
+        classification = np.zeros(peakDiff.shape)
+        classification[diastolicPeriodsMask] = 1
+        classification[systolicPeriodsMask] = 2
+
+        pdb.set_trace()
+        if plotFigures4:
             pplot(x, Pa, peaks[~peaks.mask])
             plt.xlim([fs*1, fs*4])
             plt.xlabel('Time (samples)')
             plt.axhline(threshold, linestyle='--', color='g')
             plt.show()
-        pdb.set_trace()
 
 
 
@@ -179,7 +251,7 @@ def filterExtraPeaks(rejectionCandidates, candidatePeaks, allPeaks, x, fs, Pa, o
         indexDiff = (x[peakIndex2]-x[peakIndex1])/fs
         # Calculate the ratio between first and second peaks amplitude
         # If time diference is less than 50ms...
-        if indexDiff < 0.05:
+        if indexDiff < 0.07:
             # If first peak is more than half the amplitude of the second,
             # reject the second peak, else reject the first
             if Pa[peakIndex1] > (Pa[peakIndex2] / 2):
