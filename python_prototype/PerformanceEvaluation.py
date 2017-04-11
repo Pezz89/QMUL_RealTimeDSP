@@ -29,8 +29,13 @@ def main():
         # corresponding peak in springer data within 100ms
         springerTimes = springerData[:, 0]
         offlineTimes = offlineData[:, 0]
+        # Mark all peak times that are within range of each peak from the
+        # springer data
         c = np.isclose(springerTimes, offlineTimes[np.newaxis].T, 0, 0.1*fs)
+        # Any peaks that are within 100ms are marked as correct
         results = np.any(c, axis = 0)
+
+        # Quantify results
         cpc = np.count_nonzero(results)
         correctPeakCount += cpc
         ipc = np.size(results) - np.count_nonzero(results)
@@ -63,10 +68,10 @@ def main():
         totalLabelCount += tlc
         print("-------------------------------------------------------------------------------")
         print("Filepath: {0}".format(offlineFilepath))
-        print("Correct Peak Count:\t\t\t{0}\t(%{1:.01f})".format(cpc, (cpc/tpc)*100))
-        print("Incorrect Peak Count:\t\t\t{0}\t(%{1:.01f})".format(ipc, (ipc/tpc)*100))
-        print("Correct Label Count:\t\t\t{0}\t(%{1:.01f})".format(clc, (clc/tlc)*100))
-        print("Incorrect Peak Count:\t\t\t{0}\t(%{1:.01f})".format(ilc, (ilc/tlc)*100))
+        print("Correct Peak Count:\t\t\t{0}\t({1:.01f}%)".format(cpc, (cpc/tpc)*100))
+        print("Incorrect Peak Count:\t\t\t{0}\t({1:.01f}%)".format(ipc, (ipc/tpc)*100))
+        print("Correct Label Count:\t\t\t{0}\t({1:.01f}%)".format(clc, (clc/tlc)*100))
+        print("Incorrect Label Count:\t\t\t{0}\t({1:.01f}%)".format(ilc, (ilc/tlc)*100))
         print("Total Number of Peaks Estimate:\t\t{0}\t({1:+.0f})".format(tpe, tpe-tpc))
         print("Total Number of Peaks Count:\t\t{0}".format(tpc))
         print("-------------------------------------------------------------------------------")
@@ -76,10 +81,10 @@ def main():
     print("OVERALL PERFORMANCE")
     print("===================")
     print("")
-    print("Correct Peak Count:\t\t\t{0}\t(%{1:.01f})".format(correctPeakCount, (correctPeakCount/totalPeakCount)*100))
-    print("Incorrect Peak Count:\t\t\t{0}\t(%{1:.01f})".format(incorrectPeakCount, (incorrectPeakCount/totalPeakCount)*100))
-    print("Correct Label Count:\t\t\t{0}\t(%{1:.01f})".format(correctLabelCount, (correctLabelCount/totalLabelCount)*100))
-    print("Incorrect Peak Count:\t\t\t{0}\t(%{1:.01f})".format(incorrectLabelCount, (incorrectLabelCount/totalLabelCount)*100))
+    print("Correct Peak Count:\t\t\t{0}\t({1:.01f}%)".format(correctPeakCount, (correctPeakCount/totalPeakCount)*100))
+    print("Incorrect Peak Count:\t\t\t{0}\t({1:.01f}%)".format(incorrectPeakCount, (incorrectPeakCount/totalPeakCount)*100))
+    print("Correct Label Count:\t\t\t{0}\t({1:.01f}%)".format(correctLabelCount, (correctLabelCount/totalLabelCount)*100))
+    print("Incorrect Label Count:\t\t\t{0}\t({1:.01f}%)".format(incorrectLabelCount, (incorrectLabelCount/totalLabelCount)*100))
     print("Total Number of Peaks Estimate:\t\t{0}\t({1:+.0f})".format(totalPeakEst, totalPeakEst-totalPeakCount))
     print("Total Number of Peaks Count:\t\t{0}".format(totalPeakCount))
     print("-------------------------------------------------------------------------------")

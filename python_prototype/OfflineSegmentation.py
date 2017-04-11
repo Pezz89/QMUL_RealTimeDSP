@@ -75,7 +75,7 @@ def main():
         # Set nan values created by a log(0) to 0
         E_s[~np.isfinite(E_s)] = 0
 
-        E_s = moving_average(E_s, n=3)
+        #E_s = moving_average(E_s, n=3)
 
         # Normalise average shannon energy
         mE_s = np.mean(E_s)
@@ -117,8 +117,8 @@ def main():
         pDStd = np.std(peakDiff)
         # Calculate high and low interval limits using mean and standard
         # deviation
-        lowIntervalLim = pDMean - (pDStd * 1)
-        highIntervalLim = pDMean + (pDStd *1)
+        lowIntervalLim = pDMean - pDStd
+        highIntervalLim = pDMean + pDStd
         rejectionCandidates = np.where(peakDiff < lowIntervalLim)[0]
         # Flip array vertially
         rejectionCandidates = rejectionCandidates[np.newaxis].T
