@@ -19,7 +19,7 @@ function main()
         [PCG, Fs1] = audioread(PCGPath);  % load data
 
         % Resample data
-        PCG_resampled      = resample(PCG,springer_options.audio_Fs,Fs1); % resample to springer_options.audio_Fs (1000 Hz)
+        PCG_resampled = resample(PCG,springer_options.audio_Fs,Fs1); % resample to springer_options.audio_Fs (1000 Hz)
 
         % Running runSpringerSegmentationAlgorithm.m to obtain the
         % assigned_states
