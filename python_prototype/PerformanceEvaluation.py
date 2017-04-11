@@ -16,6 +16,11 @@ def main():
 
     correctPeakCount = 0
     incorrectPeakCount = 0
+    correctLabelCount = 0
+    incorrectLabelCount = 0
+    totalLabelCount = 0
+    totalPeakCount = 0
+    totalPeakEst = 0
     for (offlineFilepath, springerFilepath) in pairedResults:
         offlineData = np.genfromtxt(offlineFilepath, delimiter=',').astype(int)
         springerData = np.genfromtxt(springerFilepath, delimiter=',').astype(int)
@@ -28,12 +33,30 @@ def main():
         results = np.any(c, axis = 0)
         correctPeakCount += np.count_nonzero(results)
         incorrectPeakCount += np.size(results) - np.count_nonzero(results)
-    print("Correct Peak Count: {0}".format(correctPeakCount))
-    print("Incorrect Peak Count: {0}".format(incorrectPeakCount))
+        totalPeakEst += offlineTimes.size
+        totalPeakCount += springerTimes.size
+
+        # For peaks that were correctly identified check which ones were
+        # correctly labeled
+        springerLabels = springerData[:, 1]
+        offlineLabels = offlineData[:, 1]
+
+        inds = np.where(c)
+        sL = springerLabels[inds[1]]
+        oL = offlineLabels[inds[0]]
+        correctLabels = sL == oL
+        correctLabelCount += np.count_nonzero(correctLabels)
+        incorrectLabelCount += np.size(correctLabels) - np.count_nonzero(correctLabels)
+        totalLabelCount += springerLabels.size
+
+    print("Correct Peak Count:\t\t\t{0}\t(%{1:.01f})".format(correctPeakCount, (correctPeakCount/totalPeakCount)*100))
+    print("Incorrect Peak Count:\t\t\t{0}\t(%{1:.01f})".format(incorrectPeakCount, (incorrectPeakCount/totalPeakCount)*100))
+    print("Correct Label Count:\t\t\t{0}\t(%{1:.01f})".format(correctLabelCount, (correctLabelCount/totalLabelCount)*100))
+    print("Incorrect Peak Count:\t\t\t{0}\t(%{1:.01f})".format(incorrectLabelCount, (incorrectLabelCount/totalLabelCount)*100))
+    print("Total Number of Peaks Estimate:\t\t{0}\t({1:+.0f})".format(totalPeakEst, totalPeakEst-totalPeakCount))
+    print("Total Number of Peaks Count:\t\t{0}".format(totalPeakCount))
 
 
-    # For peaks that were correctly identified check which ones were
-    # correctly labeled
 
 
 

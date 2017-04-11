@@ -117,8 +117,8 @@ def main():
         pDStd = np.std(peakDiff)
         # Calculate high and low interval limits using mean and standard
         # deviation
-        lowIntervalLim = pDMean - (pDStd * 0.75)
-        highIntervalLim = pDMean + (pDStd * 1.5)
+        lowIntervalLim = pDMean - (pDStd * 1)
+        highIntervalLim = pDMean + (pDStd *1)
         rejectionCandidates = np.where(peakDiff < lowIntervalLim)[0]
         # Flip array vertially
         rejectionCandidates = rejectionCandidates[np.newaxis].T
