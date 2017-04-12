@@ -33,7 +33,17 @@ class system:
 
     def __init__(self):
         self.calibratedMax = 0
-        self.test = np.empty(0, dtype=float)
+        # Pretend that we know the sample rate...
+        self.fs = 1000
+        # Calculate window and hop size for windowing input signal
+        self.hopSize = int(0.01 * self.fs)
+        self.winSize = int(0.02 * self.fs)
+        self.overlapFactor = np.ceil(self.winSize/self.hopSize)
+
+        self.n = 103
+        self.E_s = np.zeros(self.n, dtype=float)
+        self.E_sPtr = 0
+        self.Pa = np.array([])
 
     @staticmethod
     def moving_average(a, n=3) :
@@ -45,24 +55,24 @@ class system:
         if sample > self.calibratedMax:
             self.calibratedMax = sample
 
-    def calculateNormAvrShannonEnergy(self):
-
+    def calculateAvrShannonEnergy(self):
         for ptr, pos in zip(self.bufferReadPtrs, self.bufferReadPtrsPos):
             if pos == self.winSize-1:
                 inds = np.arange(ptr-self.winSize, ptr)%self.bufferArray.size
                 sig = self.bufferArray[inds]
-                # Calculate average shannon energy
-                E_s = (-1/self.winSize) * np.sum((sig**2)*np.log(sig**2))
+                a = (-1/self.winSize) * np.sum((sig**2)*np.log(sig**2))
                 # Set nan values created by a log(0) to 0
-                #E_s[~np.isfinite(E_s)] = 0
-                self.test = np.append(self.test, E_s)
-
-                #E_s = moving_average(E_s, n=3)
+                if not np.isfinite(a):
+                    a = 0
+                self.E_s[self.E_sPtr] = a
+                # Increment pointer and wrap around
+                self.E_sPtr += 1
+                self.E_sPtr %= self.n
 
                 # Normalise average shannon energy
-                # mE_s = np.mean(E_s)
-                # sE_s = np.std(E_s)
-                # Pa = (E_s - mE_s)/sE_s
+                mE_s = np.mean(self.E_s)
+                sE_s = np.std(self.E_s)
+                self.Pa = np.append(self.Pa, (a - mE_s)/sE_s)
 
     def main(self):
         # Get file names for all PCG data
@@ -79,19 +89,15 @@ class system:
             # Simulate chunks of audio as input to real-time system
             sig = self.rolling_window(sig, 2048, 2048)
 
-            # Calculate window and hop size for windowing input signal
-            hopSize = int(0.01 * fs)
-            N = self.winSize = int(0.02 * fs)
-            overlapFactor = np.ceil(N/hopSize)
 
             # Allocate circular buffer for calculating shannon energy using
             # overlapping windows
-            self.bufferArray = np.zeros(self.winSize+((overlapFactor-1)*hopSize))
+            self.bufferArray = np.zeros(self.winSize+((self.overlapFactor-1)*self.hopSize))
             self.bufferWritePtr = 0
-            self.bufferReadPtrs = np.arange(overlapFactor, dtype=int)
-            self.bufferReadPtrs *= -hopSize
-            self.bufferReadPtrsPos = np.arange(overlapFactor, dtype=int)
-            self.bufferReadPtrsPos *= -hopSize
+            self.bufferReadPtrs = np.arange(self.overlapFactor, dtype=int)
+            self.bufferReadPtrs *= -self.hopSize
+            self.bufferReadPtrsPos = np.arange(self.overlapFactor, dtype=int)
+            self.bufferReadPtrsPos *= -self.hopSize
 
             # Allocate interger to count the number os samples that have passed
             sampleCount = 0
@@ -115,7 +121,7 @@ class system:
                     sample *= self.calibratedMax
 
                     self.bufferArray[self.bufferWritePtr] = sample
-                    self.calculateNormAvrShannonEnergy()
+                    self.calculateAvrShannonEnergy()
 
                     self.bufferWritePtr += 1
                     self.bufferWritePtr %= self.bufferArray.size
@@ -123,9 +129,8 @@ class system:
                     self.bufferReadPtrs %= self.bufferArray.size
                     self.bufferReadPtrsPos += 1
                     self.bufferReadPtrsPos %= self.winSize
-                    #print(self.bufferReadPtrsPos)
             pdb.set_trace()
-            plt.plot(self.a)
+            plt.plot(self.Pa)
             plt.show()
 
 
