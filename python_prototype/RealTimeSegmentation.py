@@ -206,7 +206,7 @@ class system:
                 # If a peak is found, store location in boolean mask
                 if np.any(peaks):
                     self.peakFound = True
-                    self.PaPeaks[self.PaPtr] = True
+                    self.PaPeaks[x] = peaks
                     self.overshoot = False
                 else:
                     self.PaPeaks[self.PaPtr] = False
