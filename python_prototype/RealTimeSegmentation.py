@@ -54,6 +54,9 @@ class system:
         self.overshoot = False
         self.overshootCounter = False
 
+        # Used for storing all peaks for offline analysis.
+        self.allPeaks = np.array([])
+
 
 
     @staticmethod
@@ -157,56 +160,60 @@ class system:
                         self.findNewPeaks(threshold)
 
 
-            pdb.set_trace()
             plt.plot(self.Pa)
+            plt.plot(self.PaPeaks)
             plt.show()
+            pdb.set_trace()
 
     def findNewPeaks(self, threshold):
         # If Pa values are above the threshold and a peak hasn't previously
         # been found
-        if (self.Pa[self.PaPtr] >= threshold) & (~self.peakFound):
-            # If a start index has not been set for the current overshoot...
-            if not self.overshoot:
-                # Store the start index of the overshoot
-                self.overshootCounter = 0
-                self.overshoot = True
-            else:
-                self.overshootCounter += 1
+        if (self.Pa[self.PaPtr] >= threshold):
+            if not self.peakFound:
+                # If a start index has not been set for the current overshoot...
+                if not self.overshoot:
+                    # Store the start index of the overshoot
+                    self.overshootCounter = 0
+                    self.overshoot = True
+                else:
+                    self.overshootCounter += 1
 
-            # search for a peak since the Pa values first raised above the
-            # threshold
+                # search for a peak since the Pa values first raised above the
+                # threshold
 
-            # compute first order difference
-            x = np.arange(self.PaPtr-self.overshootCounter, self.PaPtr+1)%self.Pa.size
-            dy = np.diff(self.Pa[x])
+                # compute first order difference
+                x = np.arange(self.PaPtr-self.overshootCounter, self.PaPtr+1)%self.Pa.size
+                dy = np.diff(self.Pa[x])
 
-            # propagate left and right values successively to fill all plateau pixels (0-value)
-            zeros,=np.where(dy == 0)
-
-            while len(zeros):
-                # add pixels 2 by 2 to propagate left and right value onto the zero-value pixel
-                zerosr = np.hstack([dy[1:], 0.])
-                zerosl = np.hstack([0., dy[:-1]])
-
-                # replace 0 with right value if non zero
-                dy[zeros]=zerosr[zeros]
+                # propagate left and right values successively to fill all plateau pixels (0-value)
                 zeros,=np.where(dy == 0)
 
-                # replace 0 with left value if non zero
-                dy[zeros]=zerosl[zeros]
-                zeros,=np.where(dy == 0)
+                while len(zeros):
+                    # add pixels 2 by 2 to propagate left and right value onto the zero-value pixel
+                    zerosr = np.hstack([dy[1:], 0.])
+                    zerosl = np.hstack([0., dy[:-1]])
 
-            # find the peaks by using the first order difference
-            peaks = np.where((np.hstack([dy, 0.]) < 0.)
-                            & (np.hstack([0., dy]) > 0.))[0]
-            # If a peak is found, store location in boolean mask
-            if np.any(peaks):
-                self.peakFound = True
-                self.PaPeak[self.PaPtr-self.overshootCounter%self.PaPeaks.size] = True
-            # else peak has not been found yet...
+                    # replace 0 with right value if non zero
+                    dy[zeros]=zerosr[zeros]
+                    zeros,=np.where(dy == 0)
+
+                    # replace 0 with left value if non zero
+                    dy[zeros]=zerosl[zeros]
+                    zeros,=np.where(dy == 0)
+
+                # find the peaks by using the first order difference
+                peaks = (np.hstack([dy, 0.]) < 0.) & (np.hstack([0., dy]) > 0.)
+                # If a peak is found, store location in boolean mask
+                if np.any(peaks):
+                    self.peakFound = True
+                    self.PaPeaks[self.PaPtr] = True
+                    self.overshoot = False
+                else:
+                    self.PaPeaks[self.PaPtr] = False
             else:
-                self.peakFound = False
+                self.PaPeaks[self.PaPtr] = False
         else:
+            self.PaPeaks[self.PaPtr] = False
             self.peakFound = False
             self.overshoot = False
         return self.peakFound
