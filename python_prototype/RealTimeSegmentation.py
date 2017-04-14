@@ -40,14 +40,23 @@ class system:
         self.winSize = int(0.02 * self.fs)
         self.overlapFactor = np.ceil(self.winSize/self.hopSize)
 
+        # Amount of time (in secs) to spend calibrating at the start of the
+        # sample.
+        self.calibrationPeriod = 1.0
+
+        # Size of moving average and standard deviation windows for signal
+        # normalisation
         self.n = 103
+        # Array to store un-normlised shannon energy
         self.E_s = np.zeros(self.n, dtype=float)
         self.E_sPtr = 0
+        # Create array to store normalised shannon energy
         PaBufferSize = np.round((5.0*self.fs) / self.hopSize)
         self.Pa = np.zeros(PaBufferSize)
         self.PaPtr = 0
 
         # Peak finding members
+        self.threshold = 0.5
         # Boolean mask of peaks found in the last 5 seconds
         self.PaPeaks = np.zeros(PaBufferSize, dtype=bool)
         self.peakFound = False
@@ -135,7 +144,7 @@ class system:
                     sampleCount += 1
 
                     # If less than a second's worth of samples have been processed...
-                    if sampleCount < fs:
+                    if sampleCount < self.calibrationPeriod*fs:
                         # Use the current sample as part of system calibration
                         self.calibrateSystem(sample)
                         continue
@@ -155,9 +164,10 @@ class system:
 
                     # Every time a new shannon energy value is calculated...
                     if newVal:
-                        threshold = 0.5
                         # Calculate if it is a peak above the threshold
-                        self.findNewPeaks(threshold)
+                        peakFound = self.findNewPeaks()
+                        if peakFound:
+                            self.filterExtraPeaks()
 
 
             plt.plot(self.Pa)
@@ -165,10 +175,72 @@ class system:
             plt.show()
             pdb.set_trace()
 
-    def findNewPeaks(self, threshold):
+    def filterExtraPeaks(self):
+        # for all peaks in buffer
+        x = np.arange(self.PaPtr, self.PaPtr + self.PaPeaks.size) % self.PaPeaks.size
+        peaks = np.where(self.PaPeaks[x])[0]
+        # Calculate the interval between adjacent peaks
+        peakDiff = np.diff(peaks)
+        if not peakDiff.size:
+            return
+        pDMean = np.nan_to_num(np.mean(peakDiff))
+
+        pDStd = np.nan_to_num(np.std(peakDiff))
+        # Calculate high and low interval limits using mean and standard
+        # deviation
+        lowIntervalLim = pDMean - pDStd
+        # TODO: Deal with nan situation for high limit
+        highIntervalLim = pDMean + pDStd
+        # If the difference between peaks is less than the limit then the last
+        # peak or the peak before it can be deleted.
+        if peakDiff[-1] < lowIntervalLim:
+            peakIndex1 = peaks[-2]
+            peakIndex2 = peaks[-1]
+            indexDiff = ((peakIndex2*self.hopSize)-(peakIndex1*self.hopSize))/self.fs
+
+            if indexDiff < 0.05:
+                # If first peak is more than half the amplitude of the second,
+                # reject the second peak, else reject the first
+                if self.Pa[x[peakIndex1]] > (self.Pa[x[peakIndex2]] / 2):
+                    self.PaPeaks[x[peakIndex2]] = False
+                else:
+                    self.PaPeaks[x[peakIndex1]] = False
+            else:
+                # If the first peak's energy is higher than that of the second
+                # peak
+                if self.Pa[x[peakIndex1]] > self.Pa[x[peakIndex2]]:
+                    newPeakDiff = np.diff(peaks[:-1])
+                    # Create array of all previous second intervals
+                    secondIntervals = newPeakDiff[1-(newPeakDiff.size % 2)::2]
+                    # Get last calculated interval
+                    if not np.any(secondIntervals):
+                        self.PaPeaks[x[peakIndex2]] = False
+                        return
+
+                    # Sperate last calculated interval from all other intervals
+                    lastInterval = secondIntervals[-1]
+                    secondIntervals = secondIntervals[:-1]
+
+                    # Calculate mean and variance of all other intervals
+                    pDMean = np.mean(secondIntervals)
+                    pDVar = np.var(secondIntervals)
+
+                    # If current interval is more or less than the mean +/- the
+                    # variance, remove first peak, else remove the second peak
+                    if (lastInterval > pDMean + pDVar) or (lastInterval < pDMean - pDVar):
+                        self.PaPeaks[x[peakIndex1]] = False
+                    else:
+                        self.PaPeaks[x[peakIndex2]] = False
+
+                else:
+                    # Else, reject the first peak
+                    self.PaPeaks[x[peakIndex1]] = False
+
+
+    def findNewPeaks(self):
         # If Pa values are above the threshold and a peak hasn't previously
         # been found
-        if (self.Pa[self.PaPtr] >= threshold):
+        if (self.Pa[self.PaPtr] >= self.threshold):
             if not self.peakFound:
                 # If a start index has not been set for the current overshoot...
                 if not self.overshoot:
@@ -176,10 +248,13 @@ class system:
                     self.overshootCounter = 0
                     self.overshoot = True
                 else:
+                    # Increment number of windows passed since thershold overshoot
                     self.overshootCounter += 1
 
-                # search for a peak since the Pa values first raised above the
+                ###############################################################
+                # Search for a peak since the Pa values first raised above the
                 # threshold
+                ###############################################################
 
                 # compute first order difference
                 x = np.arange(self.PaPtr-self.overshootCounter, self.PaPtr+1)%self.Pa.size
@@ -208,16 +283,19 @@ class system:
                     self.peakFound = True
                     self.PaPeaks[x] = peaks
                     self.overshoot = False
+                # Else clear any previous peaks from circular buffer
                 else:
                     self.PaPeaks[self.PaPtr] = False
+            # Else clear any previous peaks from circular buffer
             else:
                 self.PaPeaks[self.PaPtr] = False
         else:
+            # Set all bools to false ready for next overshoot
             self.PaPeaks[self.PaPtr] = False
             self.peakFound = False
             self.overshoot = False
+        # Return whether a peak was found on the current Pa window
         return self.peakFound
-
 
 
     @staticmethod
@@ -235,65 +313,6 @@ class system:
         outputPath = os.path.join(path, inputBasename+"_segs.csv")
         np.savetxt(outputPath, results, fmt='%i', delimiter=",")
 
-    @staticmethod
-    def filterExtraPeaks(rejectionCandidates, candidatePeaks, allPeaks, x, fs, Pa, offset):
-        if not np.ma.isMaskedArray(candidatePeaks):
-            candidatePeaks = ma.array(candidatePeaks)
-            candidatePeaks.mask = np.zeros(candidatePeaks.size, dtype=bool)
-        for i, inds in enumerate(rejectionCandidates):
-            # Get index location of peaks to potentially be rejected
-            # Use data member to bypass the mask
-            peakIndex1 = candidatePeaks.data[inds[0]]
-            peakIndex2 = candidatePeaks.data[inds[1]]
-            # Calculate time difference between indexes
-            indexDiff = (x[peakIndex2]-x[peakIndex1])/fs
-            # Calculate the ratio between first and second peaks amplitude
-            # If time diference is less than 50ms...
-            if indexDiff < 0.07:
-                # If first peak is more than half the amplitude of the second,
-                # reject the second peak, else reject the first
-                if Pa[peakIndex1] > (Pa[peakIndex2] / 2):
-                    candidatePeaks[inds[1]] = ma.masked
-                else:
-                    candidatePeaks[inds[0]] = ma.masked
-            else:
-                # If the first peak's energy is higher than that of the second
-                # peak
-                if Pa[peakIndex1] > Pa[peakIndex2]:
-                    # Calculate mean and variance of every 2nd interval
-                    # before the current interval
-                    prevPeaksMask = allPeaks.mask.copy()
-                    # TODO: Deal with this edge case
-                    # if not isinstance(xx, np.ndarray):
-                    #     prevPeaksMask = np.array([prevPeaksMask])
-                    # Mask any peak indexes beyond and including the current interval
-                    prevPeaksMask[offset+inds[1]:] = True
-                    newPeakDiff = np.diff(allPeaks[~prevPeaksMask])
-                    # Create array of all previous second intervals
-                    secondIntervals = newPeakDiff[1-(newPeakDiff.size % 2)::2]
-                    # Get last calculated interval
-                    if not np.any(secondIntervals.data):
-                        candidatePeaks[inds[1]] = ma.masked
-                        continue
-
-                    lastInterval = secondIntervals[-1]
-
-                    # Sperate last calculated interval from all other intervals
-                    secondIntervals = secondIntervals[:-1]
-                    pDMean = np.mean(secondIntervals)
-                    pDVar = np.var(secondIntervals)
-
-                    # If current interval is more or less than the mean +/- the
-                    # variance, remove first peak, else remove the second peak
-                    if (lastInterval > pDMean + pDVar) or (lastInterval < pDMean - pDVar):
-                        candidatePeaks[inds[0]] = ma.masked
-                    else:
-                        candidatePeaks[inds[1]] = ma.masked
-
-                else:
-                    # Else, reject the first peak
-                    candidatePeaks[inds[0]] = ma.masked
-        return candidatePeaks
 
 
     @staticmethod

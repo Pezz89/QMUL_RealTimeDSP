@@ -1,4 +1,5 @@
 .DS_Store
+filterPeaks.py
 bin/
 # Compiled Object files
 *.slo
