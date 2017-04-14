@@ -66,6 +66,7 @@ class system:
         # Used for storing all peaks for offline analysis.
         self.allPeaks = np.array([])
 
+        self.currentPeakInterval = 0
 
 
     @staticmethod
@@ -155,6 +156,7 @@ class system:
                     self.bufferArray[self.bufferWritePtr] = sample
                     newVal = self.calculateAvrShannonEnergy()
 
+                    # Increment pointers and wrap around buffer sizes
                     self.bufferWritePtr += 1
                     self.bufferWritePtr %= self.bufferArray.size
                     self.bufferReadPtrs += 1
@@ -165,15 +167,193 @@ class system:
                     # Every time a new shannon energy value is calculated...
                     if newVal:
                         # Calculate if it is a peak above the threshold
-                        peakFound = self.findNewPeaks()
+                        peakFound = self.findNewPeaks(self.PaPtr, self.threshold)
                         if peakFound:
                             self.filterExtraPeaks()
+                            self.currentPeakInterval = 0
+                        else:
+                            # Increment time since last peak was found
+                            self.currentPeakInterval += self.hopSize
+                            self.findLostPeaks()
 
 
+            pdb.set_trace()
             plt.plot(self.Pa)
             plt.plot(self.PaPeaks)
             plt.show()
-            pdb.set_trace()
+
+    def findLostPeaks(self):
+        # Search for any peaks that have been lost
+        x = np.arange(self.PaPtr, self.PaPtr + self.PaPeaks.size) % self.PaPeaks.size
+        # Find where peaks are located in relation to the current pointer
+        peaks = np.where(self.PaPeaks[x])[0]
+        # Calculate the interval between adjacent peaks
+        peakDiff = np.diff(peaks)
+        if not peakDiff.size:
+            return
+        pDMean = np.nan_to_num(np.mean(peakDiff))
+
+        pDStd = np.nan_to_num(np.std(peakDiff))
+        # TODO: Deal with nan situation for high limit
+        highIntervalLim = pDMean + pDStd
+        lowIntervalLim = pDMean - pDStd
+        if highIntervalLim == 0:
+            highIntervalLim = float('Inf')
+        # If time is larger than the high interval limit...
+        if self.currentPeakInterval >= highIntervalLim:
+            print(highIntervalLim)
+            peakIndex1 = peaks[-1]
+            peakIndex2 = self.PaPtr
+            lostPeakRange = np.arange(x[peakIndex1]+1, x[peakIndex2]) % self.PaPeaks.size
+
+            reductionAmount = (self.threshold - np.min(self.Pa)) / reductionIterations
+            reducedThreshold = self.threshold - reductionAmount
+            while reducedThreshold > np.min(self.Pa):
+                # Create threshold to be iterativey reduced until peaks are found
+                reducedThreshold -= reductionAmount
+                # Get all peaks that aren't currently masked
+
+                ###############################################################
+                # Search for a peak since the Pa values first raised above the
+                # threshold
+                ###############################################################
+
+                # compute first order difference
+                dy = np.diff(self.Pa[lostPeakRange])
+
+                # propagate left and right values successively to fill all plateau pixels (0-value)
+                zeros,=np.where(dy == 0)
+
+                while len(zeros):
+                    # add pixels 2 by 2 to propagate left and right value onto the zero-value pixel
+                    zerosr = np.hstack([dy[1:], 0.])
+                    zerosl = np.hstack([0., dy[:-1]])
+
+                    # replace 0 with right value if non zero
+                    dy[zeros]=zerosr[zeros]
+                    zeros,=np.where(dy == 0)
+
+                    # replace 0 with left value if non zero
+                    dy[zeros]=zerosl[zeros]
+                    zeros,=np.where(dy == 0)
+
+                # find the peaks by using the first order difference
+                peaks = (np.hstack([dy, 0.]) < 0.) & (np.hstack([0., dy]) > 0.)
+                # If a peak is found, store location in boolean mask
+                if np.any(peaks):
+                    self.PaPeaks[lostPeakRange] = peaks
+                    break
+
+            '''
+            newPeakRange = np.arange(x[peakIndex1], x[peakIndex2]) % self.PaPeaks.size
+            peakDiff = np.diff(self.PaPeaks[newPeakRange])
+            # If the difference between peaks is less than the limit then the last
+            # peak or the peak before it can be deleted.
+            for ind, i in enumerate(peakDiff):
+                if i < lowIntervalLim:
+                    peakIndex1 = self.PaPeaks[newPeakRange][ind]% self.PaPeaks.size
+                    peakIndex2 = self.PaPeaks[newPeakRange][ind+1]% self.PaPeaks.size
+                    indexDiff = ((peakIndex2*self.hopSize)-(peakIndex1*self.hopSize))/self.fs
+
+                    if indexDiff < 0.05:
+                        # If first peak is more than half the amplitude of the second,
+                        # reject the second peak, else reject the first
+                        if self.Pa[x[peakIndex1]] > (self.Pa[x[peakIndex2]] / 2):
+                            self.PaPeaks[x[peakIndex2]] = False
+                        else:
+                            self.PaPeaks[x[peakIndex1]] = False
+                    else:
+                        # If the first peak's energy is higher than that of the second
+                        # peak
+                        if self.Pa[x[peakIndex1]] > self.Pa[x[peakIndex2]]:
+                            newPeakDiff = np.diff(peaks[:-1])
+                            # Create array of all previous second intervals
+                            secondIntervals = newPeakDiff[1-(newPeakDiff.size % 2)::2]
+                            # Get last calculated interval
+                            if not np.any(secondIntervals):
+                                self.PaPeaks[x[peakIndex2]] = False
+                                return
+
+                            # Sperate last calculated interval from all other intervals
+                            lastInterval = secondIntervals[-1]
+                            secondIntervals = secondIntervals[:-1]
+
+                            # Calculate mean and variance of all other intervals
+                            pDMean = np.mean(secondIntervals)
+                            pDVar = np.var(secondIntervals)
+
+                            # If current interval is more or less than the mean +/- the
+                            # variance, remove first peak, else remove the second peak
+                            if (lastInterval > pDMean + pDVar) or (lastInterval < pDMean - pDVar):
+                                self.PaPeaks[x[peakIndex1]] = False
+                            else:
+                                self.PaPeaks[x[peakIndex2]] = False
+
+                        else:
+                            # Else, reject the first peak
+                            self.PaPeaks[x[peakIndex1]] = False
+            '''
+
+
+    def findNewPeaks(self, PaPtr, threshold):
+        # If Pa values are above the threshold and a peak hasn't previously
+        # been found
+        if (self.Pa[PaPtr] >= threshold):
+            if not self.peakFound:
+                # If a start index has not been set for the current overshoot...
+                if not self.overshoot:
+                    # Store the start index of the overshoot
+                    self.overshootCounter = 0
+                    self.overshoot = True
+                else:
+                    # Increment number of windows passed since thershold overshoot
+                    self.overshootCounter += 1
+
+                ###############################################################
+                # Search for a peak since the Pa values first raised above the
+                # threshold
+                ###############################################################
+
+                # compute first order difference
+                x = np.arange(PaPtr-self.overshootCounter, PaPtr+1)%self.Pa.size
+                dy = np.diff(self.Pa[x])
+
+                # propagate left and right values successively to fill all plateau pixels (0-value)
+                zeros,=np.where(dy == 0)
+
+                while len(zeros):
+                    # add pixels 2 by 2 to propagate left and right value onto the zero-value pixel
+                    zerosr = np.hstack([dy[1:], 0.])
+                    zerosl = np.hstack([0., dy[:-1]])
+
+                    # replace 0 with right value if non zero
+                    dy[zeros]=zerosr[zeros]
+                    zeros,=np.where(dy == 0)
+
+                    # replace 0 with left value if non zero
+                    dy[zeros]=zerosl[zeros]
+                    zeros,=np.where(dy == 0)
+
+                # find the peaks by using the first order difference
+                peaks = (np.hstack([dy, 0.]) < 0.) & (np.hstack([0., dy]) > 0.)
+                # If a peak is found, store location in boolean mask
+                if np.any(peaks):
+                    self.peakFound = True
+                    self.PaPeaks[x] = peaks
+                    self.overshoot = False
+                # Else clear any previous peaks from circular buffer
+                else:
+                    self.PaPeaks[PaPtr] = False
+            # Else clear any previous peaks from circular buffer
+            else:
+                self.PaPeaks[PaPtr] = False
+        else:
+            # Set all bools to false ready for next overshoot
+            self.PaPeaks[PaPtr] = False
+            self.peakFound = False
+            self.overshoot = False
+        # Return whether a peak was found on the current Pa window
+        return self.peakFound
 
     def filterExtraPeaks(self):
         # for all peaks in buffer
@@ -236,66 +416,6 @@ class system:
                     # Else, reject the first peak
                     self.PaPeaks[x[peakIndex1]] = False
 
-
-    def findNewPeaks(self):
-        # If Pa values are above the threshold and a peak hasn't previously
-        # been found
-        if (self.Pa[self.PaPtr] >= self.threshold):
-            if not self.peakFound:
-                # If a start index has not been set for the current overshoot...
-                if not self.overshoot:
-                    # Store the start index of the overshoot
-                    self.overshootCounter = 0
-                    self.overshoot = True
-                else:
-                    # Increment number of windows passed since thershold overshoot
-                    self.overshootCounter += 1
-
-                ###############################################################
-                # Search for a peak since the Pa values first raised above the
-                # threshold
-                ###############################################################
-
-                # compute first order difference
-                x = np.arange(self.PaPtr-self.overshootCounter, self.PaPtr+1)%self.Pa.size
-                dy = np.diff(self.Pa[x])
-
-                # propagate left and right values successively to fill all plateau pixels (0-value)
-                zeros,=np.where(dy == 0)
-
-                while len(zeros):
-                    # add pixels 2 by 2 to propagate left and right value onto the zero-value pixel
-                    zerosr = np.hstack([dy[1:], 0.])
-                    zerosl = np.hstack([0., dy[:-1]])
-
-                    # replace 0 with right value if non zero
-                    dy[zeros]=zerosr[zeros]
-                    zeros,=np.where(dy == 0)
-
-                    # replace 0 with left value if non zero
-                    dy[zeros]=zerosl[zeros]
-                    zeros,=np.where(dy == 0)
-
-                # find the peaks by using the first order difference
-                peaks = (np.hstack([dy, 0.]) < 0.) & (np.hstack([0., dy]) > 0.)
-                # If a peak is found, store location in boolean mask
-                if np.any(peaks):
-                    self.peakFound = True
-                    self.PaPeaks[x] = peaks
-                    self.overshoot = False
-                # Else clear any previous peaks from circular buffer
-                else:
-                    self.PaPeaks[self.PaPtr] = False
-            # Else clear any previous peaks from circular buffer
-            else:
-                self.PaPeaks[self.PaPtr] = False
-        else:
-            # Set all bools to false ready for next overshoot
-            self.PaPeaks[self.PaPtr] = False
-            self.peakFound = False
-            self.overshoot = False
-        # Return whether a peak was found on the current Pa window
-        return self.peakFound
 
 
     @staticmethod
