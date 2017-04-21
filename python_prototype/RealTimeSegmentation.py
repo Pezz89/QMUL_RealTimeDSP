@@ -46,7 +46,7 @@ class system:
 
         # Size of moving average and standard deviation windows for signal
         # normalisation
-        self.n = 103
+        self.n = 200
         # Array to store un-normlised shannon energy
         self.E_s = np.zeros(self.n, dtype=float)
         self.E_sPtr = 0
@@ -64,7 +64,8 @@ class system:
         self.overshootCounter = False
 
         # Used for storing all peaks for offline analysis.
-        self.allPeaks = np.array([])
+        self.allPeaks = np.array([], dtype=bool)
+        self.allPa = np.array([])
 
         self.currentPeakInterval = 0
 
@@ -109,10 +110,11 @@ class system:
 
     def main(self):
         # Get file names for all PCG data
-        PCGFiles = glob.glob("../validation_dataset/*.wav")
+        PCGFiles = glob.glob("../validation_dataset/e001*.wav")
 
         # For each PCG data file...
         for filepath in PCGFiles:
+            self.__init__()
             print("Analysing: {0}".format(filepath))
             # Read audio in
             sndfile = pysndfile.PySndfile(filepath, 'r')
@@ -166,6 +168,8 @@ class system:
 
                     # Every time a new shannon energy value is calculated...
                     if newVal:
+                        self.allPa = np.append(self.allPa, self.Pa[(self.PaPtr+1)%self.Pa.size])
+                        self.allPeaks = np.append(self.allPeaks, self.PaPeaks[(self.PaPtr+1)%self.PaPeaks.size])
                         # Calculate if it is a peak above the threshold
                         peakFound = self.findNewPeaks(self.PaPtr, self.threshold)
                         if peakFound:
@@ -173,14 +177,26 @@ class system:
                             self.currentPeakInterval = 0
                         else:
                             # Increment time since last peak was found
-                            self.currentPeakInterval += self.hopSize
-                            self.findLostPeaks()
+                            self.currentPeakInterval += 1
+                            #self.findLostPeaks()
+            self.allPa = np.append(self.allPa, self.Pa[np.arange(self.PaPtr+1, self.PaPtr+self.Pa.size)%self.Pa.size])
+            self.allPeaks = np.append(self.allPeaks, self.PaPeaks[np.arange(self.PaPtr+1, self.PaPtr+self.Pa.size)%self.PaPeaks.size])
+            x = ((np.arange(self.allPa.size)*self.hopSize)+np.round(self.winSize/2)).astype(int)
+            times = np.round((x[self.allPeaks]-(self.n*self.hopSize))/2)[np.newaxis].T
+            classification = np.ones(x[self.allPeaks].size)[np.newaxis].T
+            results = np.hstack((times, classification)).astype(int)
+            self.saveResults(filepath, results)
 
 
-            pdb.set_trace()
-            plt.plot(self.Pa)
-            plt.plot(self.PaPeaks)
+            '''
+            plt.plot(x-(self.n*self.hopSize), self.allPa)
+            plt.plot(x, self.allPa)
+            plt.plot(data)
+            plt.plot(x-(self.n*self.hopSize), self.allPeaks)
+            #plt.plot(x, self.allPeaks)
             plt.show()
+            pdb.set_trace()
+            '''
 
     def findLostPeaks(self):
         # Search for any peaks that have been lost
@@ -195,13 +211,14 @@ class system:
 
         pDStd = np.nan_to_num(np.std(peakDiff))
         # TODO: Deal with nan situation for high limit
+        if pDStd == 0:
+            pDStd = float('Inf')
         highIntervalLim = pDMean + pDStd
         lowIntervalLim = pDMean - pDStd
-        if highIntervalLim == 0:
-            highIntervalLim = float('Inf')
         # If time is larger than the high interval limit...
-        if self.currentPeakInterval >= highIntervalLim:
+        if peakDiff[-1] < highIntervalLim:
             print(highIntervalLim)
+            print(self.currentPeakInterval)
             peakIndex1 = peaks[-1]
             peakIndex2 = self.PaPtr
             lostPeakRange = np.arange(x[peakIndex1]+1, x[peakIndex2]) % self.PaPeaks.size
@@ -237,7 +254,7 @@ class system:
                     dy[zeros]=zerosl[zeros]
                     zeros,=np.where(dy == 0)
 
-                # find the peaks by using the first order difference
+                # find the peaks by usng the first order difference
                 peaks = (np.hstack([dy, 0.]) < 0.) & (np.hstack([0., dy]) > 0.)
                 # If a peak is found, store location in boolean mask
                 if np.any(peaks):
@@ -322,6 +339,8 @@ class system:
                 zeros,=np.where(dy == 0)
 
                 while len(zeros):
+                    if not np.any(dy):
+                        break
                     # add pixels 2 by 2 to propagate left and right value onto the zero-value pixel
                     zerosr = np.hstack([dy[1:], 0.])
                     zerosl = np.hstack([0., dy[:-1]])
@@ -420,7 +439,7 @@ class system:
 
     @staticmethod
     def saveResults(inputFile, results):
-        path = '../OfflineResults/'
+        path = '../RealtimeResults/'
 
         # Create folder if it doesn't already exist
         try:
