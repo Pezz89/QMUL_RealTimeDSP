@@ -110,7 +110,7 @@ class system:
 
     def main(self):
         # Get file names for all PCG data
-        PCGFiles = glob.glob("../validation_dataset/e001*.wav")
+        PCGFiles = glob.glob("../validation_dataset/*.wav")
 
         # For each PCG data file...
         for filepath in PCGFiles:
