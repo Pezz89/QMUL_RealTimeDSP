@@ -20,12 +20,12 @@ class LED {
             // If the LED is on then write this out to the digital pin and
             // increment the times
             if(active) {
-                digitalWrite(context, n, P8_07, 1);
+                digitalWrite(context, n, pin, 1);
                 timer++;
             }
             // Otherwise, turn the LED off
             else {
-                digitalWrite(context, n, P8_07, 0);
+                digitalWrite(context, n, pin, 0);
             }
         }
 
