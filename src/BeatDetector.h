@@ -71,16 +71,16 @@ class BeatDetector {
                     float sigAccum = 0.0;
                     float powSamp;
                     for(int i=ptr-(winSize-1); i != ptr; i++, i%=audioBuffer.size()){
-                        powSamp = pow(audioBuffer[i], 2);
+                        powSamp = pow(audioBuffer[i], 2.0);
                         sigAccum += powSamp * log(powSamp);
                     }
-                    rt_printf("sigAc:%f\n", sigAccum);
-                    sigAccum = (-1/winSize)*sigAccum;
+                    sigAccum = (-1.0/winSize)*sigAccum;
                     // If a Nan value is created due to a log(0), set the
                     // output to 0
                     if(isnan(sigAccum)) {
                         sigAccum = 0;
                     }
+                    rt_printf("sigAc:%f\n", sigAccum);
                 }
 
             }
