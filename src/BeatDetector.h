@@ -2,6 +2,8 @@
 #include <vector>
 #include <cmath>
 #include <algorithm>
+#include <fstream>
+#include <iomanip>
 
 #include "DebouncedButton.h"
 #include "LED.h"
@@ -14,6 +16,7 @@ class BeatDetector {
         BeatDetector(BelaContext *context) : context(context){
             // Create a button object for each physical button
             debouncedButton1 = DebouncedButton(P8_07, 0.1*context->audioSampleRate);
+            debouncedButton2 = DebouncedButton(P8_08, 0.1*context->audioSampleRate);
             // Use the first second after the activation button is pressed for
             // system calibration
             calibrationTime = 1*context->audioSampleRate;
@@ -32,6 +35,7 @@ class BeatDetector {
             bufferReadPtrs.resize(overlapFactor);
             bufferReadPtrsPos.resize(overlapFactor);
 
+            myfile.open("/example2.csv");
 
             // bufferReadPtrs stores the index to read in relation to the
             // circular buffer.
@@ -39,7 +43,7 @@ class BeatDetector {
             // window currently being read
 
             // Equivelants to Numpy style vector operations (np.arange and *=)
-            // taken from: 
+            // taken from:
             // https://codereview.stackexchange.com/questions/77546/multiply-vector-elements-by-a-scalar-value-using-stl-and-templates
             // http://stackoverflow.com/questions/17694579/use-stdfill-to-populate-vector-with-increasing-numbers
             // Fill vector with values from 0-overlapFactor
@@ -54,6 +58,8 @@ class BeatDetector {
             // Store 5 seconds of previous normalisaed shannon energy values
             normShanEngySize = round((5.0*context->audioSampleRate) / hopSize);
             normalisedShannonEnergy.resize(normShanEngySize);
+            n = context->audioSampleRate*0.1;
+            shannonEnergy.resize(n, 0);
         }
 
 
@@ -80,7 +86,29 @@ class BeatDetector {
                     if(isnan(sigAccum)) {
                         sigAccum = 0;
                     }
-                    rt_printf("sigAc:%f\n", sigAccum);
+                    shanEngyMeanAccum -= shannonEnergy[normShanEngyPtr];
+                    shannonEnergy[normShanEngyPtr] = sigAccum;
+                    shanEngyMeanAccum += sigAccum;
+                    shanEngyMean = shanEngyMeanAccum / shannonEnergy.size();
+                    float stdAccum = 0.0;
+                    for(int j=0; j<shannonEnergy.size(); j++) {
+                        stdAccum += pow(std::abs(shannonEnergy[j] - shanEngyMean), 2.0);
+                    }
+                    float stdMean = stdAccum / shannonEnergy.size();
+                    shanEngyStd = sqrt(stdMean);
+
+                    float normShanEngyVal = (sigAccum - shanEngyMean)/shanEngyStd;
+                    if(isnan(normShanEngyVal)) {
+                        normShanEngyVal = 0;
+                    }
+                    normalisedShannonEnergy[normShanEngyPtr] = normShanEngyVal ;
+                    myfile << std::fixed << std::setprecision(8) << normalisedShannonEnergy[normShanEngyPtr] << std::endl;
+
+                    // Increment pointer and wrap around
+                    shanEngyPtr += 1;
+                    shanEngyPtr %= n;
+                    normShanEngyPtr += 1;
+                    normShanEngyPtr %= normShanEngySize;
                 }
 
             }
@@ -100,6 +128,13 @@ class BeatDetector {
                 rt_printf("%d\n", sampleCounter);
                 sampleCounter += 1;
                 return 0.0;
+            }
+
+
+            if(sampleCounter > calibrationTime*7) {
+                rt_printf("YUP");
+                myfile.close();
+                exit(0);
             }
 
             audioBuffer[bufferWritePtr] = sample;
@@ -129,6 +164,7 @@ class BeatDetector {
         // Counts how many samples have elapsed since the last trigger
         unsigned int sampleCounter = 0;
         DebouncedButton debouncedButton1;
+        DebouncedButton debouncedButton2;
         BelaContext* context;
 
         //////////////////////////////////////////////////////////////////////
@@ -159,12 +195,17 @@ class BeatDetector {
         //////////////////////////////////////////////////////////////////////
         // Stores the number of shannon energy values to be used in the moving
         // mean and standard deviation calculations
-        int n = 100;
+        int n;
         // Vector for storing the un-normalised shannon energy values
         std::vector<float> shannonEnergy;
+        int shanEngyPtr = 0;
 
         // Vector to store normalised shannon energy
         int normShanEngySize = 0;
         std::vector<float> normalisedShannonEnergy;
         int normShanEngyPtr = 0;
+        float shanEngyMean = 0;
+        float shanEngyMeanAccum = 0;
+        float shanEngyStd = 0;
+        std::ofstream myfile;
 };
