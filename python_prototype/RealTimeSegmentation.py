@@ -34,7 +34,7 @@ class system:
     def __init__(self):
         self.calibratedMax = 0
         # Pretend that we know the sample rate...
-        self.fs = 1000
+        self.fs = 2000
         # Calculate window and hop size for windowing input signal
         self.hopSize = int(0.01 * self.fs)
         self.winSize = int(0.02 * self.fs)
@@ -46,7 +46,7 @@ class system:
 
         # Size of moving average and standard deviation windows for signal
         # normalisation
-        self.n = 200
+        self.n = 100
         # Array to store un-normlised shannon energy
         self.E_s = np.zeros(self.n, dtype=float)
         self.E_sPtr = 0
@@ -138,9 +138,7 @@ class system:
             sampleCount = 0
             # For each chunk of audio in the signal
             for audio in sig:
-                # For every sample in current audio block. Iterating over a numpy
-                # array with a python for loop... There will be no good coding
-                # practices from this point forward.
+                # For every sample in current audio block.
                 for sample in audio:
                     # Increment sample counter by the number of samples that have been
                     # processed
@@ -180,23 +178,22 @@ class system:
                             self.currentPeakInterval += 1
                             #self.findLostPeaks()
             self.allPa = np.append(self.allPa, self.Pa[np.arange(self.PaPtr+1, self.PaPtr+self.Pa.size)%self.Pa.size])
+            pdb.set_trace()
             self.allPeaks = np.append(self.allPeaks, self.PaPeaks[np.arange(self.PaPtr+1, self.PaPtr+self.Pa.size)%self.PaPeaks.size])
-            x = ((np.arange(self.allPa.size)*self.hopSize)+np.round(self.winSize/2)).astype(int)
+            x = (np.arange(self.allPa.size)*self.hopSize).astype(int)#+np.round(self.winSize/2)).astype(int)
             times = np.round((x[self.allPeaks]-(self.n*self.hopSize))/2)[np.newaxis].T
             classification = np.ones(x[self.allPeaks].size)[np.newaxis].T
             results = np.hstack((times, classification)).astype(int)
             self.saveResults(filepath, results)
 
 
-            '''
             plt.plot(x-(self.n*self.hopSize), self.allPa)
-            plt.plot(x, self.allPa)
+            #plt.plot(x, self.allPa)
             plt.plot(data)
-            plt.plot(x-(self.n*self.hopSize), self.allPeaks)
+            #plt.plot(x-(self.n*self.hopSize), self.allPeaks)
             #plt.plot(x, self.allPeaks)
             plt.show()
             pdb.set_trace()
-            '''
 
     def findLostPeaks(self):
         # Search for any peaks that have been lost
@@ -260,56 +257,6 @@ class system:
                 if np.any(peaks):
                     self.PaPeaks[lostPeakRange] = peaks
                     break
-
-            '''
-            newPeakRange = np.arange(x[peakIndex1], x[peakIndex2]) % self.PaPeaks.size
-            peakDiff = np.diff(self.PaPeaks[newPeakRange])
-            # If the difference between peaks is less than the limit then the last
-            # peak or the peak before it can be deleted.
-            for ind, i in enumerate(peakDiff):
-                if i < lowIntervalLim:
-                    peakIndex1 = self.PaPeaks[newPeakRange][ind]% self.PaPeaks.size
-                    peakIndex2 = self.PaPeaks[newPeakRange][ind+1]% self.PaPeaks.size
-                    indexDiff = ((peakIndex2*self.hopSize)-(peakIndex1*self.hopSize))/self.fs
-
-                    if indexDiff < 0.05:
-                        # If first peak is more than half the amplitude of the second,
-                        # reject the second peak, else reject the first
-                        if self.Pa[x[peakIndex1]] > (self.Pa[x[peakIndex2]] / 2):
-                            self.PaPeaks[x[peakIndex2]] = False
-                        else:
-                            self.PaPeaks[x[peakIndex1]] = False
-                    else:
-                        # If the first peak's energy is higher than that of the second
-                        # peak
-                        if self.Pa[x[peakIndex1]] > self.Pa[x[peakIndex2]]:
-                            newPeakDiff = np.diff(peaks[:-1])
-                            # Create array of all previous second intervals
-                            secondIntervals = newPeakDiff[1-(newPeakDiff.size % 2)::2]
-                            # Get last calculated interval
-                            if not np.any(secondIntervals):
-                                self.PaPeaks[x[peakIndex2]] = False
-                                return
-
-                            # Sperate last calculated interval from all other intervals
-                            lastInterval = secondIntervals[-1]
-                            secondIntervals = secondIntervals[:-1]
-
-                            # Calculate mean and variance of all other intervals
-                            pDMean = np.mean(secondIntervals)
-                            pDVar = np.var(secondIntervals)
-
-                            # If current interval is more or less than the mean +/- the
-                            # variance, remove first peak, else remove the second peak
-                            if (lastInterval > pDMean + pDVar) or (lastInterval < pDMean - pDVar):
-                                self.PaPeaks[x[peakIndex1]] = False
-                            else:
-                                self.PaPeaks[x[peakIndex2]] = False
-
-                        else:
-                            # Else, reject the first peak
-                            self.PaPeaks[x[peakIndex1]] = False
-            '''
 
 
     def findNewPeaks(self, PaPtr, threshold):
