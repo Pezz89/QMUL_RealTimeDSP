@@ -129,7 +129,7 @@ reason, the project was developed by first implementing two prototype
 implementations in Python, in order to test the various elements and allow for
 iterative evaluation of performance as the project progressed.
 
-\subsection{Offline Python Implementation}
+\subsection{Offline Python Implementation}\label{offline}
 Initially an offline implementation of the algorithm was developed, aiming to
 reproduce the algorithm presented as faithfully as possible. This would focus
 on achieving the highest segmentation accuracy possible.\\
@@ -181,11 +181,38 @@ results in the final selection of peaks to be used for heart sound
 segmentation.
 
 \subsubsection{Heart Sound Classification}
+In addition to steps taken, the paper outines a method for the classification
+of heart sounds as either the first or second heart sound. A great deal of time
+was spent attempting to interpret this section of the paper, however ambiguity
+in the original method used, caused by the quality of English, meant that
+implementation of this was not possible. This had a significant impact on
+results as discussed in section~\ref{pEval}
 
 \subsection{Pseudo Real-time Python Implementation}
-All good coding practices ignored in the interest of compatability with C++
+In order to adapt the offline code described in section~\ref{offline} for
+real-time implementation, a second
+prototype was created with the aim of producing similar results using only
+methods that could be implemented in a causal system. This required
+consideration for any previously designed logic that took a global view over
+input, such as peak picking and normalisation of input.
+
+\subsubsection{Significant Modifications}
+The following aspects were modified to create a causal system suitable for
+real-time implementation:
+\begin{itemize}
+    \item Normalisation
+    \item Buffering of analysis for peak filtering and recovery
+    \item Adaptation of peak filtering and recovery to use only previous peaks
+\end{itemize}
+
+Unlike code designed for offline analysis, the intention of the pseudo
+real-time implementation was that it would be directly translatable to C++.
+For this reason all good coding practices were ignored in the interest of compatibility with C++
 code
-\section{Prototype Evaluation}
+\section{Prototype Evaluation}\label{pEval}
+Python implementations allows for the evaluation of methods over a large
+dataset. An automatic script was developed to allow for file-by-file and
+overall performance annalysis.
 Dataset used
 - filtered to 2k
 Segmentation comparison
@@ -206,13 +233,13 @@ Use of hysteresis in peak detection to avoid double overshoots
     \label{OfflineShanEngy}
 \end{figure}
 \begin{figure}[H]
-    \caption{Extra Peak Filtering}
-    \makebox[\textwidth]{\includegraphics[width=1.1\textwidth]{OfflinePeakFilter}}
-    \label{OfflinePeakFilter}
-\end{figure}
-\begin{figure}[H]
     \caption{Peak Picking}
     \makebox[\textwidth]{\includegraphics[width=1.1\textwidth]{OfflinePeakPick}}
     \label{OfflinePeakPick}
+\end{figure}
+\begin{figure}[H]
+    \caption{Extra Peak Filtering}
+    \makebox[\textwidth]{\includegraphics[width=1.1\textwidth]{OfflinePeakFilter}}
+    \label{OfflinePeakFilter}
 \end{figure}
 \end{document}
