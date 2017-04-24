@@ -36,11 +36,11 @@ void render(BelaContext *context, void *userData)
         // Convert input to mono
         float monoSamp = (leftIn + rightIn) * 0.5;
 
-        float out = gBeatDetector->processSample(monoSamp, n);
+        gBeatDetector->processSample(monoSamp, n);
 
         // Write the sample into the output buffer
-        audioWrite(context, n, 0, out);
-        audioWrite(context, n, 1, out);
+        audioWrite(context, n, 0, monoSamp);
+        audioWrite(context, n, 1, monoSamp);
     }
 }
 

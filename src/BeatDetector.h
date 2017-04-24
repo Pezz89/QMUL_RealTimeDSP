@@ -26,7 +26,8 @@ class BeatDetector {
             overlapFactor = ceil(winSize/hopSize);
             // Create circular buffer of size to store windows for processing
             // in real-time
-            audioBuffer.resize(winSize+((overlapFactor-1)*hopSize), 0);
+            audioBufferSize = winSize+((overlapFactor-1)*hopSize);
+            audioBuffer.resize(audioBufferSize, 0);
 
             // Create a write pointer at position 0 in buffer
             bufferWritePtr = 0;
@@ -35,8 +36,8 @@ class BeatDetector {
             bufferReadPtrs.resize(overlapFactor);
             bufferReadPtrsPos.resize(overlapFactor);
 
-            energyFile.open("/ShannonEnergy.csv");
-            peaksFile.open("/Peaks.csv");
+            //energyFile.open("/ShannonEnergy.csv");
+            //peaksFile.open("/Peaks.csv");
 
             // bufferReadPtrs stores the index to read in relation to the
             // circular buffer.
@@ -80,7 +81,7 @@ class BeatDetector {
                     float sigAccum = 0.0;
                     float powSamp;
                     // For window index up to the current pointer index...
-                    for(int i=(ptr-(winSize-1))%audioBuffer.size(); i != ptr; i++, i%=audioBuffer.size()){
+                    for(int i=(ptr-(winSize-1))%audioBufferSize; i != ptr; i++, i%=audioBufferSize){
                         // Perform samplewise operations for shannon energy
                         powSamp = pow(audioBuffer[i], 2.0);
                         sigAccum += powSamp * log(powSamp);
@@ -116,7 +117,7 @@ class BeatDetector {
                     }
                     // Save final value to shannon energy buffer
                     normalisedShannonEnergy[normShanEngyPtr] = normShanEngyVal;
-                    energyFile << std::fixed << std::setprecision(8) << normalisedShannonEnergy[normShanEngyPtr] << std::endl;
+                    //energyFile << std::fixed << std::setprecision(8) << normalisedShannonEnergy[normShanEngyPtr] << std::endl;
 
 
                     // Signal that a new shannon energy value has been
@@ -138,18 +139,20 @@ class BeatDetector {
             // return 0
             if(sampleCounter < calibrationTime){
                 calibrateSystem(sample);
-                rt_printf("%d\n", sampleCounter);
+                //rt_printf("%d\n", sampleCounter);
                 sampleCounter += 1;
                 return 0.0;
             }
 
 
+            /*
             if(sampleCounter > calibrationTime*17) {
-                rt_printf("YUP");
-                energyFile.close();
-                peaksFile.close();
+                //rt_printf("YUP");
+                //energyFile.close();
+                //peaksFile.close();
                 exit(0);
             }
+            */
 
             audioBuffer[bufferWritePtr] = sample;
             // Calculate new values for shannon energy and get status of
@@ -159,7 +162,11 @@ class BeatDetector {
             // Every time a new shannon energy value is calculated...
             if(newVal) {
                 // Calculate if it is a peak above the threshold
-                bool pf = findNewPeaks();
+                if(findNewPeaks() && (sampleCounter > 0.05 * context->audioSampleRate)){
+                    rt_printf("BEEP\n");
+                    sampleCounter = 0;
+                }
+
             }
             // Increment pointers and wrap around their respective
             // container sizes
@@ -170,12 +177,12 @@ class BeatDetector {
             // Increment the buffer write pointer and wrap to keep within size
             // of buffer
             bufferWritePtr += 1;
-            bufferWritePtr %= audioBuffer.size();
+            bufferWritePtr %= audioBufferSize;
 
             transform(bufferReadPtrs.begin(), bufferReadPtrs.end(), bufferReadPtrs.begin(), bind2nd(std::plus<int>(), 1.0));
-            transform(bufferReadPtrs.begin(), bufferReadPtrs.end(), bufferReadPtrs.begin(), bind2nd(std::modulus<int>(), audioBuffer.size()));
+            transform(bufferReadPtrs.begin(), bufferReadPtrs.end(), bufferReadPtrs.begin(), bind2nd(std::modulus<int>(), audioBufferSize));
             transform(bufferReadPtrsPos.begin(), bufferReadPtrsPos.end(), bufferReadPtrsPos.begin(), bind2nd(std::plus<int>(), 1.0));
-            transform(bufferReadPtrsPos.begin(), bufferReadPtrsPos.end(), bufferReadPtrsPos.begin(), bind2nd(std::modulus<int>(), audioBuffer.size()));
+            transform(bufferReadPtrsPos.begin(), bufferReadPtrsPos.end(), bufferReadPtrsPos.begin(), bind2nd(std::modulus<int>(), audioBufferSize));
             // Increment the counter for the number of processed samples since
             // the button was pressed. This will eventually overflow but won't
             // be used by that point unless calibration is crazy long so it has
@@ -196,9 +203,9 @@ class BeatDetector {
                     //////////////////////////////////////////////////////////////////////
                     //peaksFile << int(1) << std::endl;
 
-                    float diff = normalisedShannonEnergy[normShanEngyPtr]-normalisedShannonEnergy[(normShanEngyPtr-1)%normalisedShannonEnergy.size()];
-                    float prevDiff = normalisedShannonEnergy[(normShanEngyPtr-1)%normalisedShannonEnergy.size()]-normalisedShannonEnergy[(normShanEngyPtr-2)%normalisedShannonEnergy.size()];
-                    rt_printf("%f %f\n", diff, prevDiff);
+                    float diff = normalisedShannonEnergy[normShanEngyPtr]-normalisedShannonEnergy[(normShanEngyPtr-1)%normShanEngySize];
+                    //float prevDiff = normalisedShannonEnergy[(normShanEngyPtr-1)%normalisedShannonEnergy.size()]-normalisedShannonEnergy[(normShanEngyPtr-2)%normalisedShannonEnergy.size()];
+                    //rt_printf("%f %f\n", diff, prevDiff);
                     // Simplified plateu case handeling. The start of the
                     // plateu is classified as the peak
                     if(diff == 0) {
@@ -215,6 +222,7 @@ class BeatDetector {
                     else {
                         peakFound = false;
                         shannonEnergyPeaks[normShanEngyPtr] = false;
+                        prevDiff = diff;
                     }
                 }
                 else {
@@ -226,9 +234,10 @@ class BeatDetector {
                 peakFound = false;
                 shannonEnergyPeaks[normShanEngyPtr] = false;
                 //peaksFile << int(0) << std::endl;
+                prevDiff = 1.0;
             }
 
-            peaksFile << int(shannonEnergyPeaks[normShanEngyPtr]) << std::endl;
+            //peaksFile << int(shannonEnergyPeaks[normShanEngyPtr]) << std::endl;
             return peakFound;
         }
     private:
@@ -261,6 +270,7 @@ class BeatDetector {
         int overlapFactor;
         // Buffer for storing samples until full windows are accumulated
         std::vector<float> audioBuffer;
+        int audioBufferSize = 0;
         // Vector of read pointers for buffer
         std::vector<int> bufferReadPtrs;
         std::vector<int> bufferReadPtrsPos;
@@ -286,8 +296,8 @@ class BeatDetector {
         float shanEngyStd = 0;
 
         // Test file output stream
-        std::ofstream energyFile;
-        std::ofstream peaksFile;
+        //std::ofstream energyFile;
+        //std::ofstream peaksFile;
 
 
         //////////////////////////////////////////////////////////////////////
@@ -299,4 +309,6 @@ class BeatDetector {
         // Stores whether a peak has already been found for the current
         // threshold overshoot
         bool peakFound = false;
+        float prevDiff = 1.0;
+        
 };

@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 
-../Bela/scripts/build_project.sh ./src/ -p Assignment_3 -m "clean debug CPPFLAGS=-std=c++14" --force -n
+../Bela/scripts/build_project.sh ./src/ -p Assignment_3 -c "-p 128" -m "clean debug CPPFLAGS=-std=c++14" --force
  

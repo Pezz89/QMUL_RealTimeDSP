@@ -261,56 +261,6 @@ class system:
                     self.PaPeaks[lostPeakRange] = peaks
                     break
 
-            '''
-            newPeakRange = np.arange(x[peakIndex1], x[peakIndex2]) % self.PaPeaks.size
-            peakDiff = np.diff(self.PaPeaks[newPeakRange])
-            # If the difference between peaks is less than the limit then the last
-            # peak or the peak before it can be deleted.
-            for ind, i in enumerate(peakDiff):
-                if i < lowIntervalLim:
-                    peakIndex1 = self.PaPeaks[newPeakRange][ind]% self.PaPeaks.size
-                    peakIndex2 = self.PaPeaks[newPeakRange][ind+1]% self.PaPeaks.size
-                    indexDiff = ((peakIndex2*self.hopSize)-(peakIndex1*self.hopSize))/self.fs
-
-                    if indexDiff < 0.05:
-                        # If first peak is more than half the amplitude of the second,
-                        # reject the second peak, else reject the first
-                        if self.Pa[x[peakIndex1]] > (self.Pa[x[peakIndex2]] / 2):
-                            self.PaPeaks[x[peakIndex2]] = False
-                        else:
-                            self.PaPeaks[x[peakIndex1]] = False
-                    else:
-                        # If the first peak's energy is higher than that of the second
-                        # peak
-                        if self.Pa[x[peakIndex1]] > self.Pa[x[peakIndex2]]:
-                            newPeakDiff = np.diff(peaks[:-1])
-                            # Create array of all previous second intervals
-                            secondIntervals = newPeakDiff[1-(newPeakDiff.size % 2)::2]
-                            # Get last calculated interval
-                            if not np.any(secondIntervals):
-                                self.PaPeaks[x[peakIndex2]] = False
-                                return
-
-                            # Sperate last calculated interval from all other intervals
-                            lastInterval = secondIntervals[-1]
-                            secondIntervals = secondIntervals[:-1]
-
-                            # Calculate mean and variance of all other intervals
-                            pDMean = np.mean(secondIntervals)
-                            pDVar = np.var(secondIntervals)
-
-                            # If current interval is more or less than the mean +/- the
-                            # variance, remove first peak, else remove the second peak
-                            if (lastInterval > pDMean + pDVar) or (lastInterval < pDMean - pDVar):
-                                self.PaPeaks[x[peakIndex1]] = False
-                            else:
-                                self.PaPeaks[x[peakIndex2]] = False
-
-                        else:
-                            # Else, reject the first peak
-                            self.PaPeaks[x[peakIndex1]] = False
-            '''
-
 
     def findNewPeaks(self, PaPtr, threshold):
         # If Pa values are above the threshold and a peak hasn't previously
