@@ -6,7 +6,6 @@
 #include <iomanip>
 
 #include "DebouncedButton.h"
-#include "LED.h"
 
 class BeatDetector {
     public:
@@ -163,7 +162,7 @@ class BeatDetector {
             if(newVal) {
                 // Calculate if it is a peak above the threshold
                 if(findNewPeaks() && (sampleCounter > 0.05 * context->audioSampleRate)){
-                    rt_printf("BEEP\n");
+                    rt_printf("BEEP %d\n", sampleCounter);
                     sampleCounter = 0;
                 }
 
