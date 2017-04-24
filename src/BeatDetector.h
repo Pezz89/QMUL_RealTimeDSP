@@ -59,7 +59,7 @@ class BeatDetector {
             // Store 5 seconds of previous normalisaed shannon energy values
             normShanEngySize = round((1.0*context->audioSampleRate) / hopSize);
             normalisedShannonEnergy.resize(normShanEngySize);
-            shannonEnergyPeaks.resize(normShanEngySize);
+            shannonEnergyPeaks.resize(normShanEngySize, false);
 
             nn = 100;
             shannonEnergy.resize(nn, 0);
@@ -159,7 +159,7 @@ class BeatDetector {
             // Every time a new shannon energy value is calculated...
             if(newVal) {
                 // Calculate if it is a peak above the threshold
-                bool peakFound = findNewPeaks(threshold);
+                bool pf = findNewPeaks();
             }
             // Increment pointers and wrap around their respective
             // container sizes
@@ -185,47 +185,50 @@ class BeatDetector {
         }
 
 
-        bool findNewPeaks(float threshold) {
+        bool findNewPeaks() {
             if(normalisedShannonEnergy[normShanEngyPtr] > threshold) {
                 // If a peak hasn't already been found for the current
                 // overshoot...
-                if(!peakFound){
-                    // If a start index has not been set for the current overshoot...
-                    if(!overshoot) {
-                        // Store the start index of the overshoot
-                        overshootCounter = 0;
-                        overshoot = true;
-                    }
-                    else {
-                        // Increment number of windows passed since thershold overshoot
-                        overshootCounter += 1;
-                    }
-
+                if(!peakFound) {
                     //////////////////////////////////////////////////////////////////////
                     // Search for a peak since the Pa values first raised above the
                     // threshold
                     //////////////////////////////////////////////////////////////////////
+                    //peaksFile << int(1) << std::endl;
 
                     float diff = normalisedShannonEnergy[normShanEngyPtr]-normalisedShannonEnergy[(normShanEngyPtr-1)%normalisedShannonEnergy.size()];
+                    float prevDiff = normalisedShannonEnergy[(normShanEngyPtr-1)%normalisedShannonEnergy.size()]-normalisedShannonEnergy[(normShanEngyPtr-2)%normalisedShannonEnergy.size()];
+                    rt_printf("%f %f\n", diff, prevDiff);
                     // Simplified plateu case handeling. The start of the
                     // plateu is classified as the peak
                     if(diff == 0) {
-                        diff = -1;
+                        diff = -1.0;
                     }
-                    if((prevDiff > 0) && (diff < 0)) {
+                    if(prevDiff == 0) {
+                        prevDiff = -1.0;
+                    }
+                    // Check if last frame is a peak
+                    if((prevDiff < 0.0) && (diff > 0.0)) {
                         peakFound = true;
                         shannonEnergyPeaks[normShanEngyPtr] = true;
                     }
-                    prevDiff = diff;
+                    else {
+                        peakFound = false;
+                        shannonEnergyPeaks[normShanEngyPtr] = false;
+                    }
+                }
+                else {
+                    shannonEnergyPeaks[normShanEngyPtr] = false;
+                    //peaksFile << int(0) << std::endl;
                 }
             }
             else {
                 peakFound = false;
-                overshoot = false;
-                prevDiff = 0;
+                shannonEnergyPeaks[normShanEngyPtr] = false;
+                //peaksFile << int(0) << std::endl;
             }
 
-            peaksFile << int(peakFound) << std::endl;
+            peaksFile << int(shannonEnergyPeaks[normShanEngyPtr]) << std::endl;
             return peakFound;
         }
     private:
@@ -296,11 +299,4 @@ class BeatDetector {
         // Stores whether a peak has already been found for the current
         // threshold overshoot
         bool peakFound = false;
-        // Store whether shannon energy values are currently above the
-        // threshold
-        bool overshoot = false;
-        // Stores count frames past since last overshoot
-        int overshootCounter = 0;
-        // Vector to store location of peaks found on current overshoot
-        float prevDiff = 0;
 };
