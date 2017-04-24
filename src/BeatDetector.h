@@ -35,7 +35,8 @@ class BeatDetector {
             bufferReadPtrs.resize(overlapFactor);
             bufferReadPtrsPos.resize(overlapFactor);
 
-            myfile.open("/example2.csv");
+            energyFile.open("/ShannonEnergy.csv");
+            peaksFile.open("/Peaks.csv");
 
             // bufferReadPtrs stores the index to read in relation to the
             // circular buffer.
@@ -56,10 +57,12 @@ class BeatDetector {
             std::transform(bufferReadPtrsPos.begin(), bufferReadPtrsPos.end(), bufferReadPtrsPos.begin(), std::bind1st(std::multiplies<int>(), -hopSize));
 
             // Store 5 seconds of previous normalisaed shannon energy values
-            normShanEngySize = round((5.0*context->audioSampleRate) / hopSize);
+            normShanEngySize = round((1.0*context->audioSampleRate) / hopSize);
             normalisedShannonEnergy.resize(normShanEngySize);
-            n = context->audioSampleRate*0.1;
-            shannonEnergy.resize(n, 0);
+            shannonEnergyPeaks.resize(normShanEngySize);
+
+            nn = 100;
+            shannonEnergy.resize(nn, 0);
         }
 
 
@@ -76,7 +79,9 @@ class BeatDetector {
                 if(pos == winSize-1) {
                     float sigAccum = 0.0;
                     float powSamp;
-                    for(int i=ptr-(winSize-1); i != ptr; i++, i%=audioBuffer.size()){
+                    // For window index up to the current pointer index...
+                    for(int i=(ptr-(winSize-1))%audioBuffer.size(); i != ptr; i++, i%=audioBuffer.size()){
+                        // Perform samplewise operations for shannon energy
                         powSamp = pow(audioBuffer[i], 2.0);
                         sigAccum += powSamp * log(powSamp);
                     }
@@ -86,29 +91,37 @@ class BeatDetector {
                     if(isnan(sigAccum)) {
                         sigAccum = 0;
                     }
+                    // Calculate consecutive mean values by accumulating n
+                    // previous values and dividing by n
                     shanEngyMeanAccum -= shannonEnergy[normShanEngyPtr];
+                    // Store current shannon energy value to buffer
                     shannonEnergy[normShanEngyPtr] = sigAccum;
                     shanEngyMeanAccum += sigAccum;
                     shanEngyMean = shanEngyMeanAccum / shannonEnergy.size();
+                    // Calculate standard deviation of previous n values
                     float stdAccum = 0.0;
                     for(int j=0; j<shannonEnergy.size(); j++) {
                         stdAccum += pow(std::abs(shannonEnergy[j] - shanEngyMean), 2.0);
                     }
                     float stdMean = stdAccum / shannonEnergy.size();
                     shanEngyStd = sqrt(stdMean);
+                    //rt_printf("%f\n", shanEngyStd);
 
+                    // Normalise shannon energy using mean and standard
+                    // deviation
                     float normShanEngyVal = (sigAccum - shanEngyMean)/shanEngyStd;
+                    // If output value is Nan, set to 0
                     if(isnan(normShanEngyVal)) {
                         normShanEngyVal = 0;
                     }
-                    normalisedShannonEnergy[normShanEngyPtr] = normShanEngyVal ;
-                    myfile << std::fixed << std::setprecision(8) << normalisedShannonEnergy[normShanEngyPtr] << std::endl;
+                    // Save final value to shannon energy buffer
+                    normalisedShannonEnergy[normShanEngyPtr] = normShanEngyVal;
+                    energyFile << std::fixed << std::setprecision(8) << normalisedShannonEnergy[normShanEngyPtr] << std::endl;
 
-                    // Increment pointer and wrap around
-                    shanEngyPtr += 1;
-                    shanEngyPtr %= n;
-                    normShanEngyPtr += 1;
-                    normShanEngyPtr %= normShanEngySize;
+
+                    // Signal that a new shannon energy value has been
+                    // calculated
+                    newVal = true;
                 }
 
             }
@@ -131,14 +144,29 @@ class BeatDetector {
             }
 
 
-            if(sampleCounter > calibrationTime*7) {
+            if(sampleCounter > calibrationTime*17) {
                 rt_printf("YUP");
-                myfile.close();
+                energyFile.close();
+                peaksFile.close();
                 exit(0);
             }
 
             audioBuffer[bufferWritePtr] = sample;
-            calculateAverageShannonEnergy();
+            // Calculate new values for shannon energy and get status of
+            // whether a new value has been generated
+            bool newVal = calculateAverageShannonEnergy();
+
+            // Every time a new shannon energy value is calculated...
+            if(newVal) {
+                // Calculate if it is a peak above the threshold
+                bool peakFound = findNewPeaks(threshold);
+            }
+            // Increment pointers and wrap around their respective
+            // container sizes
+            shanEngyPtr += 1;
+            shanEngyPtr %= nn;
+            normShanEngyPtr += 1;
+            normShanEngyPtr %= normShanEngySize;
             // Increment the buffer write pointer and wrap to keep within size
             // of buffer
             bufferWritePtr += 1;
@@ -154,6 +182,51 @@ class BeatDetector {
             // been left as is.
             sampleCounter += 1;
             return sample;
+        }
+
+
+        bool findNewPeaks(float threshold) {
+            if(normalisedShannonEnergy[normShanEngyPtr] > threshold) {
+                // If a peak hasn't already been found for the current
+                // overshoot...
+                if(!peakFound){
+                    // If a start index has not been set for the current overshoot...
+                    if(!overshoot) {
+                        // Store the start index of the overshoot
+                        overshootCounter = 0;
+                        overshoot = true;
+                    }
+                    else {
+                        // Increment number of windows passed since thershold overshoot
+                        overshootCounter += 1;
+                    }
+
+                    //////////////////////////////////////////////////////////////////////
+                    // Search for a peak since the Pa values first raised above the
+                    // threshold
+                    //////////////////////////////////////////////////////////////////////
+
+                    float diff = normalisedShannonEnergy[normShanEngyPtr]-normalisedShannonEnergy[(normShanEngyPtr-1)%normalisedShannonEnergy.size()];
+                    // Simplified plateu case handeling. The start of the
+                    // plateu is classified as the peak
+                    if(diff == 0) {
+                        diff = -1;
+                    }
+                    if((prevDiff > 0) && (diff < 0)) {
+                        peakFound = true;
+                        shannonEnergyPeaks[normShanEngyPtr] = true;
+                    }
+                    prevDiff = diff;
+                }
+            }
+            else {
+                peakFound = false;
+                overshoot = false;
+                prevDiff = 0;
+            }
+
+            peaksFile << int(peakFound) << std::endl;
+            return peakFound;
         }
     private:
         void calibrateSystem(const float &sample) {
@@ -195,7 +268,7 @@ class BeatDetector {
         //////////////////////////////////////////////////////////////////////
         // Stores the number of shannon energy values to be used in the moving
         // mean and standard deviation calculations
-        int n;
+        int nn;
         // Vector for storing the un-normalised shannon energy values
         std::vector<float> shannonEnergy;
         int shanEngyPtr = 0;
@@ -203,9 +276,31 @@ class BeatDetector {
         // Vector to store normalised shannon energy
         int normShanEngySize = 0;
         std::vector<float> normalisedShannonEnergy;
+        std::vector<bool> shannonEnergyPeaks;
         int normShanEngyPtr = 0;
         float shanEngyMean = 0;
         float shanEngyMeanAccum = 0;
         float shanEngyStd = 0;
-        std::ofstream myfile;
+
+        // Test file output stream
+        std::ofstream energyFile;
+        std::ofstream peaksFile;
+
+
+        //////////////////////////////////////////////////////////////////////
+        // Peak finding variables
+        //////////////////////////////////////////////////////////////////////
+        // Threshold that the shannon energy must pass above to trigger peak
+        // finding
+        float threshold = 0.5;
+        // Stores whether a peak has already been found for the current
+        // threshold overshoot
+        bool peakFound = false;
+        // Store whether shannon energy values are currently above the
+        // threshold
+        bool overshoot = false;
+        // Stores count frames past since last overshoot
+        int overshootCounter = 0;
+        // Vector to store location of peaks found on current overshoot
+        float prevDiff = 0;
 };
